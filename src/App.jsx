@@ -119,14 +119,14 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   if (!candles?.length) return null;
 
-  const pad = {l:2, r:64, t:14, b:14};
-  const iW = width-pad.l-pad.r, iH = height-pad.t-pad.b;
+  const pad = {l:0, r:64, t:14, b:14};
+  const iW = width-pad.r, iH = height-pad.t-pad.b;
   const prices = candles.map(c=>c.close);
   const yMax = Math.max(...prices)*1.002;
   const yMin = Math.min(...prices)*0.998;
   const yr = yMax-yMin || 1;
   const toY = v => pad.t + iH - ((v-yMin)/yr)*iH;
-  const toX = i => pad.l + (i/(candles.length-1))*iW;
+  const toX = i => (i/(candles.length-1))*iW;
 
   const color = isUp ? "#ef5350" : "#26a69a";
   const colorLight = isUp ? "#ef535033" : "#26a69a33";
@@ -134,7 +134,7 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
   // Build SVG path
   const pts = candles.map((c,i) => `${toX(i)},${toY(c.close)}`);
   const linePath = `M${pts.join("L")}`;
-  const areaPath = `M${pad.l},${pad.t+iH}L${pts.join("L")}L${toX(candles.length-1)},${pad.t+iH}Z`;
+  const areaPath = `M0,${pad.t+iH}L${pts.join("L")}L${iW},${pad.t+iH}Z`;
 
   // Y axis labels
   const yTicks = 5;
@@ -169,12 +169,12 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
 
         {/* Grid lines */}
         {yLabels.map(({y},i)=>(
-          <line key={i} x1={pad.l} y1={y} x2={pad.l+iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
+          <line key={i} x1={0} y1={y} x2={iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
         ))}
 
         {/* Y axis labels - overlaid on left side of chart */}
         {yLabels.map(({v,y})=>(
-          <text key={v} x={pad.l+8} y={y+4} textAnchor="start" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
+          <text key={v} x={8} y={y+4} textAnchor="start" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
             {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}
           </text>
         ))}
@@ -199,8 +199,8 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
         )}
 
         {/* Current price label - sits inside right padding */}
-        <rect x={pad.l+iW+4} y={toY(candles.at(-1).close)-9} width={52} height={18} rx={3} fill={color}/>
-        <text x={pad.l+iW+30} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
+        <rect x={iW+4} y={toY(candles.at(-1).close)-9} width={52} height={18} rx={3} fill={color}/>
+        <text x={iW+30} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
           {candles.at(-1).close.toFixed(2)}
         </text>
       </svg>
