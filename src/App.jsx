@@ -119,7 +119,7 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   if (!candles?.length) return null;
 
-  const pad = {l:62, r:12, t:16, b:32};
+  const pad = {l:54, r:60, t:12, b:12};
   const iW = width-pad.l-pad.r, iH = height-pad.t-pad.b;
   const prices = candles.map(c=>c.close);
   const yMax = Math.max(...prices)*1.002;
@@ -151,7 +151,8 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
       <svg
         width="100%" height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{display:"block",cursor:"crosshair"}}
+        preserveAspectRatio="none"
+        style={{display:"block",cursor:"crosshair",width:"100%"}}
         onMouseLeave={()=>setHoverIdx(null)}
         onMouseMove={e=>{
           const rect=e.currentTarget.getBoundingClientRect();
@@ -198,9 +199,9 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
             fill={color} stroke="#080c10" strokeWidth={2}/>
         )}
 
-        {/* Current price label on right edge */}
-        <rect x={pad.l+iW+2} y={toY(candles.at(-1).close)-9} width={50} height={18} rx={3} fill={color}/>
-        <text x={pad.l+iW+27} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
+        {/* Current price label - sits inside right padding */}
+        <rect x={pad.l+iW+4} y={toY(candles.at(-1).close)-9} width={52} height={18} rx={3} fill={color}/>
+        <text x={pad.l+iW+30} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
           {candles.at(-1).close.toFixed(2)}
         </text>
       </svg>
@@ -1036,7 +1037,7 @@ export default function App() {
               </div>
 
               {/* Chart */}
-              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"12px 8px 8px 0",marginBottom:20,overflow:"hidden"}}>
+              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,marginBottom:20,overflow:"hidden"}}>
                 <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(400,chartW)} height={220}/>
               </div>
 
