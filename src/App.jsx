@@ -4,6 +4,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
   createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+  updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential,
 } from "firebase/auth";
 import {
   getFirestore, doc, getDoc, setDoc, collection, getDocs, serverTimestamp,
@@ -21,7 +22,7 @@ const FIREBASE_CONFIG = {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const STARTING_CASH       = 10000;
-const PRICE_TICK_MS       = 60_000;
+const PRICE_TICK_MS       = 30_000;
 const LEADERBOARD_SYNC_MS = 15_000;
 
 const ALL_TICKERS = [
@@ -100,6 +101,7 @@ function initFirebase() {
     app, auth, db,
     GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
     createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+    updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential,
     doc, getDoc, setDoc, collection, getDocs, serverTimestamp,
   };
 }
@@ -324,6 +326,167 @@ function Spinner({msg="LOADING"}) {
   );
 }
 
+
+// ─── Settings Tab ──────────────────────────────────────────────────────────────
+function SettingsTab({ user, fbRef, privateProfile, setPrivateProfile, settingsMsg, setSettingsMsg, handleSignOut, db_save }) {
+  const [newEmail,    setNewEmail]    = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [currentPass, setCurrentPass] = useState("");
+  const [loading,     setLoading]     = useState(false);
+
+  const msg = (text, ok=true) => {
+    setSettingsMsg({text, ok});
+    setTimeout(() => setSettingsMsg(null), 4000);
+  };
+
+  const reauth = async () => {
+    const fb = fbRef.current;
+    const cred = fb.EmailAuthProvider.credential(user.email, currentPass);
+    await fb.reauthenticateWithCredential(user, cred);
+  };
+
+  const changeEmail = async () => {
+    if (!newEmail.trim()) return msg("Enter a new email.", false);
+    if (!currentPass) return msg("Enter your current password to confirm.", false);
+    setLoading(true);
+    try {
+      await reauth();
+      await fbRef.current.updateEmail(user, newEmail.trim());
+      msg("Email updated successfully!");
+      setNewEmail(""); setCurrentPass("");
+    } catch(e) {
+      const errs = {
+        "auth/wrong-password": "Current password is incorrect.",
+        "auth/email-already-in-use": "That email is already in use.",
+        "auth/invalid-email": "Invalid email address.",
+        "auth/requires-recent-login": "Please sign out and sign back in, then try again.",
+      };
+      msg(errs[e.code] || e.message, false);
+    }
+    setLoading(false);
+  };
+
+  const changePassword = async () => {
+    if (newPassword.length < 6) return msg("New password must be at least 6 characters.", false);
+    if (newPassword !== confirmPass) return msg("Passwords do not match.", false);
+    if (!currentPass) return msg("Enter your current password to confirm.", false);
+    setLoading(true);
+    try {
+      await reauth();
+      await fbRef.current.updatePassword(user, newPassword);
+      msg("Password updated successfully!");
+      setNewPassword(""); setConfirmPass(""); setCurrentPass("");
+    } catch(e) {
+      const errs = {
+        "auth/wrong-password": "Current password is incorrect.",
+        "auth/requires-recent-login": "Please sign out and sign back in, then try again.",
+      };
+      msg(errs[e.code] || e.message, false);
+    }
+    setLoading(false);
+  };
+
+  const togglePrivate = async () => {
+    const next = !privateProfile;
+    setPrivateProfile(next);
+    await db_save(next);
+    msg(next ? "Profile set to private — hidden from leaderboard." : "Profile set to public — visible on leaderboard.");
+  };
+
+  const isGoogle = user.providerData?.[0]?.providerId === "google.com";
+
+  const Section = ({title, children}) => (
+    <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:10,padding:"22px 26px",marginBottom:18}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:18}}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const Field = ({label, type, value, onChange, placeholder}) => (
+    <div style={{marginBottom:12}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:1,marginBottom:5}}>{label}</div>
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+        style={{width:"100%",maxWidth:360,background:"#0d1520",border:"1px solid #1e2d40",color:"#e0eaf5",borderRadius:6,padding:"9px 12px",fontSize:13,fontFamily:"'IBM Plex Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"border-color .2s"}}
+        onFocus={e=>e.target.style.borderColor="#00d4aa55"}
+        onBlur={e=>e.target.style.borderColor="#1e2d40"}
+      />
+    </div>
+  );
+
+  const Btn = ({onClick, children, danger}) => (
+    <button onClick={onClick} disabled={loading}
+      style={{background:danger?"#ff4d6d22":"#00d4aa22",color:danger?"#ff4d6d":"#00d4aa",border:`1px solid ${danger?"#ff4d6d55":"#00d4aa55"}`,borderRadius:6,padding:"9px 20px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",fontWeight:700,letterSpacing:1,cursor:"pointer",transition:"all .15s",opacity:loading?0.6:1}}
+      onMouseOver={e=>e.currentTarget.style.opacity="0.8"}
+      onMouseOut={e=>e.currentTarget.style.opacity="1"}
+    >{children}</button>
+  );
+
+  return (
+    <div style={{maxWidth:560}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:22}}>ACCOUNT SETTINGS — {user.displayName}</div>
+
+      {/* Status message */}
+      {settingsMsg && (
+        <div style={{marginBottom:16,background:settingsMsg.ok?"#00d4aa18":"#ff4d6d18",border:`1px solid ${settingsMsg.ok?"#00d4aa44":"#ff4d6d44"}`,borderRadius:6,padding:"10px 14px",color:settingsMsg.ok?"#00d4aa":"#ff4d6d",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",animation:"slideIn .2s ease"}}>
+          {settingsMsg.ok?"✓":"⚠"} {settingsMsg.text}
+        </div>
+      )}
+
+      {/* Profile visibility */}
+      <Section title="PRIVACY">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#e0eaf5",marginBottom:4}}>Private Profile</div>
+            <div style={{fontSize:12,color:"#4a6a8a",lineHeight:1.5}}>Hide your account from the global leaderboard.<br/>Only you can see your ranking.</div>
+          </div>
+          <div onClick={togglePrivate} style={{width:48,height:26,borderRadius:13,background:privateProfile?"#00d4aa33":"#1a2535",border:`1px solid ${privateProfile?"#00d4aa":"#2a3a4a"}`,cursor:"pointer",position:"relative",transition:"all .2s",flexShrink:0}}>
+            <div style={{position:"absolute",top:3,left:privateProfile?24:3,width:18,height:18,borderRadius:"50%",background:privateProfile?"#00d4aa":"#4a6a8a",transition:"left .2s",boxShadow:"0 1px 4px #0008"}}/>
+          </div>
+        </div>
+      </Section>
+
+      {/* Account info */}
+      <Section title="ACCOUNT">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 20px",marginBottom:4,fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>
+          <div><span style={{color:"#4a6a8a"}}>NAME </span><span style={{color:"#e0eaf5"}}>{user.displayName}</span></div>
+          <div><span style={{color:"#4a6a8a"}}>EMAIL </span><span style={{color:"#e0eaf5"}}>{user.email}</span></div>
+          <div><span style={{color:"#4a6a8a"}}>LOGIN </span><span style={{color:"#e0eaf5"}}>{isGoogle?"Google":"Email"}</span></div>
+        </div>
+      </Section>
+
+      {/* Change email - email users only */}
+      {!isGoogle && (<>
+        <Section title="CHANGE EMAIL">
+          <Field label="NEW EMAIL" type="email" value={newEmail} onChange={setNewEmail} placeholder="new@email.com"/>
+          <Field label="CURRENT PASSWORD" type="password" value={currentPass} onChange={setCurrentPass} placeholder="••••••••"/>
+          <Btn onClick={changeEmail}>UPDATE EMAIL</Btn>
+        </Section>
+
+        <Section title="CHANGE PASSWORD">
+          <Field label="CURRENT PASSWORD" type="password" value={currentPass} onChange={setCurrentPass} placeholder="••••••••"/>
+          <Field label="NEW PASSWORD" type="password" value={newPassword} onChange={setNewPassword} placeholder="••••••••"/>
+          <Field label="CONFIRM NEW PASSWORD" type="password" value={confirmPass} onChange={setConfirmPass} placeholder="••••••••"/>
+          <Btn onClick={changePassword}>UPDATE PASSWORD</Btn>
+        </Section>
+      </>)}
+
+      {isGoogle && (
+        <Section title="CHANGE EMAIL / PASSWORD">
+          <div style={{fontSize:12,color:"#4a6a8a",fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.7}}>
+            You signed in with Google. To change your email or password,<br/>visit your Google account settings at <span style={{color:"#00d4aa"}}>myaccount.google.com</span>
+          </div>
+        </Section>
+      )}
+
+      {/* Sign out */}
+      <Section title="SESSION">
+        <Btn onClick={handleSignOut} danger>SIGN OUT</Btn>
+      </Section>
+    </div>
+  );
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [fbState,  setFbState]      = useState(null);   // full firebase module object
@@ -344,8 +507,10 @@ export default function App() {
   const [flash,    setFlash]        = useState({});
   const [notif,    setNotif]        = useState(null);
   const [leaderboard,setLeaderboard]= useState([]);
-  const [saving,   setSaving]       = useState(false);
-  const [nextTick, setNextTick]     = useState(Date.now()+PRICE_TICK_MS);
+  const [saving,        setSaving]        = useState(false);
+  const [nextTick,      setNextTick]      = useState(Date.now()+PRICE_TICK_MS);
+  const [privateProfile,setPrivateProfile]= useState(false);
+  const [settingsMsg,   setSettingsMsg]   = useState(null);
 
   const notifTimer = useRef(null);
   const chartRef   = useRef(null);
@@ -380,6 +545,7 @@ export default function App() {
               setCash(d.cash ?? STARTING_CASH);
               setPortfolio(d.portfolio ?? {});
               setTrades(d.trades ?? []);
+              setPrivateProfile(d.privateProfile ?? false);
             }
           } catch(e) { console.error("Load player:", e); }
         } else {
@@ -402,14 +568,16 @@ export default function App() {
     try {
       const ts = fb.serverTimestamp();
       await fb.setDoc(fb.doc(fb.db, "players", u.uid),
-        { cash:cashVal, portfolio:port, trades:trs, displayName:u.displayName, photoURL:u.photoURL||"", updatedAt:ts },
+        { cash:cashVal, portfolio:port, trades:trs, displayName:u.displayName, photoURL:u.photoURL||"", privateProfile:false, updatedAt:ts },
         { merge:true }
       );
       await fb.setDoc(fb.doc(fb.db, "leaderboard", u.uid), {
         name: u.displayName || u.email?.split("@")[0] || "Trader",
         photoURL: u.photoURL || "",
         value: +tv.toFixed(2),
+        cash: +cashVal.toFixed(2),
         pnl: +((tv-STARTING_CASH)/STARTING_CASH*100).toFixed(2),
+        private: false,
         updatedAt: ts,
       }, { merge:true });
     } catch(e) { console.error("Save error:", e); }
@@ -670,7 +838,7 @@ export default function App() {
 
       {/* ── TABS ── */}
       <div style={{background:"#0a0f14",borderBottom:"1px solid #1a2535",paddingLeft:12,flexShrink:0}}>
-        {["trade","portfolio","leaderboard"].map(t=>(
+        {["trade","portfolio","leaderboard","settings"].map(t=>(
           <button key={t} className={`tab-btn ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{t.toUpperCase()}</button>
         ))}
       </div>
@@ -704,7 +872,7 @@ export default function App() {
               <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:20,flexWrap:"wrap"}}>
                 <div>
                   <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5",letterSpacing:2}}>{selected}</div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · 1-MIN CANDLES</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · <span style={{color:"#00d4aa88"}}>⟳ Stocks update every 30 seconds</span></div>
                 </div>
                 <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:34,fontWeight:700,color:"#e0eaf5",marginBottom:2}}>{fmtUSD(sel.current)}</span>
                 <Tag color={clr(dayChange)}>{dayChange>=0?"▲":"▼"} {fmtUSD(Math.abs(dayChange))} ({fmtPct(dayChangePct)})</Tag>
@@ -833,6 +1001,25 @@ export default function App() {
             </div>
           )}
 
+          {/* ════ SETTINGS ════ */}
+          {tab==="settings" && (
+            <SettingsTab
+              user={user}
+              fbRef={fbRef}
+              privateProfile={privateProfile}
+              setPrivateProfile={setPrivateProfile}
+              settingsMsg={settingsMsg}
+              setSettingsMsg={setSettingsMsg}
+              handleSignOut={handleSignOut}
+              db_save={async(priv)=>{
+                const fb=fbRef.current; const u=userRef.current;
+                if(!fb||!u) return;
+                await fb.setDoc(fb.doc(fb.db,"players",u.uid),{privateProfile:priv},{merge:true});
+                await fb.setDoc(fb.doc(fb.db,"leaderboard",u.uid),{private:priv},{merge:true});
+              }}
+            />
+          )}
+
           {/* ════ LEADERBOARD ════ */}
           {tab==="leaderboard" && (
             <div>
@@ -843,11 +1030,11 @@ export default function App() {
               {leaderboard.length===0
                 ? <div style={{color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace",fontSize:13}}>No players yet — be the first!</div>
                 : <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr",padding:"12px 20px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#4a6a8a",letterSpacing:1}}>
-                      {["#","","TRADER","PORTFOLIO","RETURN"].map(h=><div key={h}>{h}</div>)}
+                    <div style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"12px 20px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#4a6a8a",letterSpacing:1}}>
+                      {["#","","TRADER","PORTFOLIO","CASH","RETURN"].map(h=><div key={h}>{h}</div>)}
                     </div>
-                    {leaderboard.map((r,i)=>(
-                      <div key={r.id} style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr",padding:"14px 20px",borderBottom:"1px solid #0d1520",background:r.id===user.uid?"#00d4aa08":"transparent",borderLeft:r.id===user.uid?"2px solid #00d4aa":"2px solid transparent",alignItems:"center"}}>
+                    {leaderboard.filter(r=>!r.private||r.id===user.uid).map((r,i)=>(
+                      <div key={r.id} style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"14px 20px",borderBottom:"1px solid #0d1520",background:r.id===user.uid?"#00d4aa08":"transparent",borderLeft:r.id===user.uid?"2px solid #00d4aa":"2px solid transparent",alignItems:"center"}}>
                         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:i===0?"#ffd700":i===1?"#c0c0c0":i===2?"#cd7f32":"#3a5a7a"}}>
                           {i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}
                         </div>
@@ -857,8 +1044,11 @@ export default function App() {
                             : <div style={{width:24,height:24,borderRadius:"50%",background:"#1a2535",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#4a6a8a",fontFamily:"'IBM Plex Mono',monospace"}}>{r.name?.[0]?.toUpperCase()}</div>
                           }
                         </div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:r.id===user.uid?"#00d4aa":"#e0eaf5",fontWeight:r.id===user.uid?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:r.id===user.uid?"#00d4aa":"#e0eaf5",fontWeight:r.id===user.uid?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          {r.name}{r.private&&r.id===user.uid&&<span style={{color:"#3a5a7a",fontSize:10,marginLeft:6}}>(private)</span>}
+                        </div>
                         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#8ab0cc"}}>{fmtUSD(r.value)}</div>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#c8d6e5"}}>{fmtUSD(r.cash||0)}</div>
                         <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:clr(r.pnl)}}>{fmtPct(r.pnl)}</div>
                       </div>
                     ))}
@@ -866,7 +1056,7 @@ export default function App() {
               }
               <div style={{marginTop:14,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#2a4a6a",lineHeight:2}}>
                 ✓ Signed in as {user.displayName} — progress auto-saved to Google<br/>
-                ✓ Prices update every 60s for all players<br/>
+                ✓ Prices update every 30s for all players<br/>
                 ✓ Leaderboard refreshes every {LEADERBOARD_SYNC_MS/1000}s automatically
               </div>
             </div>
