@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
@@ -43,6 +42,15 @@ const BASES = {
   JPM:195,BAC:38,GS:465,V:278,MA:464,
   SPY:523,QQQ:447,DIA:395,IWM:208,
   DIS:112,NKE:88,KO:62,PEP:175,WMT:88,MCD:295,XOM:118,JNJ:165,PFE:29,BA:175,
+};
+const COMPANY_NAMES = {
+  AAPL:"Apple",MSFT:"Microsoft",GOOGL:"Alphabet",AMZN:"Amazon",META:"Meta",
+  NVDA:"NVIDIA",TSLA:"Tesla",NFLX:"Netflix",AMD:"AMD",INTC:"Intel",
+  CRM:"Salesforce",ORCL:"Oracle",ADBE:"Adobe",QCOM:"Qualcomm",UBER:"Uber",
+  JPM:"JPMorgan",BAC:"Bank of America",GS:"Goldman Sachs",V:"Visa",MA:"Mastercard",
+  SPY:"S&P 500 ETF",QQQ:"Nasdaq ETF",DIA:"Dow Jones ETF",IWM:"Russell 2000 ETF",
+  DIS:"Disney",NKE:"Nike",KO:"Coca-Cola",PEP:"PepsiCo",WMT:"Walmart",
+  MCD:"McDonald's",XOM:"ExxonMobil",JNJ:"Johnson & Johnson",PFE:"Pfizer",BA:"Boeing",
 };
 
 // ─── Utils ─────────────────────────────────────────────────────────────────────
@@ -106,28 +114,120 @@ function initFirebase() {
   };
 }
 
-// ─── Candlestick Chart ─────────────────────────────────────────────────────────
-function CandlestickChart({ candles, width=600, height=196 }) {
+// ─── Google Finance-style Area Chart ──────────────────────────────────────────
+function StockChart({ candles, isUp, width=600, height=300 }) {
+  const [hoverIdx, setHoverIdx] = useState(null);
   if (!candles?.length) return null;
-  const pad = {l:4, r:4, t:8, b:8};
+
+  const pad = {l:62, r:12, t:16, b:32};
   const iW = width-pad.l-pad.r, iH = height-pad.t-pad.b;
-  const yMax = Math.max(...candles.map(c=>c.high))*1.002;
-  const yMin = Math.min(...candles.map(c=>c.low))*0.998;
+  const prices = candles.map(c=>c.close);
+  const yMax = Math.max(...prices)*1.002;
+  const yMin = Math.min(...prices)*0.998;
   const yr = yMax-yMin || 1;
   const toY = v => pad.t + iH - ((v-yMin)/yr)*iH;
-  const n = candles.length, cw = iW/n, bw = Math.max(1.5, cw*0.6);
+  const toX = i => pad.l + (i/(candles.length-1))*iW;
+
+  const color = isUp ? "#ef5350" : "#26a69a";
+  const colorLight = isUp ? "#ef535033" : "#26a69a33";
+
+  // Build SVG path
+  const pts = candles.map((c,i) => `${toX(i)},${toY(c.close)}`);
+  const linePath = `M${pts.join("L")}`;
+  const areaPath = `M${pad.l},${pad.t+iH}L${pts.join("L")}L${toX(candles.length-1)},${pad.t+iH}Z`;
+
+  // Y axis labels
+  const yTicks = 5;
+  const yLabels = Array.from({length:yTicks}, (_,i) => {
+    const v = yMin + (yr * i/(yTicks-1));
+    return {v, y: toY(v)};
+  });
+
+  // Hover candle
+  const hov = hoverIdx !== null ? candles[hoverIdx] : null;
+
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{display:"block"}}>
-      {[.25,.5,.75].map(f => <line key={f} x1={pad.l} y1={pad.t+iH*f} x2={pad.l+iW} y2={pad.t+iH*f} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>)}
-      {candles.map((c, idx) => {
-        const x = pad.l+idx*cw+cw/2, isUp = c.close>=c.open, col = isUp?"#00d4aa":"#ff4d6d";
-        const bTop = toY(Math.max(c.open,c.close)), bBot = toY(Math.min(c.open,c.close)), bH = Math.max(1, bBot-bTop);
-        return <g key={idx}>
-          <line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={col} strokeWidth={1} opacity={0.65}/>
-          <rect x={x-bw/2} y={bTop} width={bw} height={bH} fill={col+"cc"} stroke={col} strokeWidth={0.5}/>
-        </g>;
-      })}
-    </svg>
+    <div style={{position:"relative",userSelect:"none"}}>
+      <svg
+        width="100%" height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{display:"block",cursor:"crosshair"}}
+        onMouseLeave={()=>setHoverIdx(null)}
+        onMouseMove={e=>{
+          const rect=e.currentTarget.getBoundingClientRect();
+          const x=(e.clientX-rect.left)*(width/rect.width)-pad.l;
+          const idx=Math.round((x/iW)*(candles.length-1));
+          setHoverIdx(Math.max(0,Math.min(candles.length-1,idx)));
+        }}
+      >
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        {yLabels.map(({y},i)=>(
+          <line key={i} x1={pad.l} y1={y} x2={pad.l+iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
+        ))}
+
+        {/* Y axis labels */}
+        {yLabels.map(({v,y})=>(
+          <text key={v} x={pad.l-8} y={y+4} textAnchor="end" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
+            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}
+          </text>
+        ))}
+
+        {/* Area fill */}
+        <path d={areaPath} fill="url(#areaGrad)"/>
+
+        {/* Line */}
+        <path d={linePath} fill="none" stroke={color} strokeWidth={1.8}
+          style={{filter:`drop-shadow(0 0 3px ${color}88)`}}/>
+
+        {/* Hover vertical line */}
+        {hoverIdx!==null && (
+          <line x1={toX(hoverIdx)} y1={pad.t} x2={toX(hoverIdx)} y2={pad.t+iH}
+            stroke="#4a6a8a" strokeWidth={1} strokeDasharray="3 3"/>
+        )}
+
+        {/* Hover dot */}
+        {hoverIdx!==null && (
+          <circle cx={toX(hoverIdx)} cy={toY(candles[hoverIdx].close)} r={4}
+            fill={color} stroke="#080c10" strokeWidth={2}/>
+        )}
+
+        {/* Current price label on right edge */}
+        <rect x={pad.l+iW+2} y={toY(candles.at(-1).close)-9} width={50} height={18} rx={3} fill={color}/>
+        <text x={pad.l+iW+27} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
+          {candles.at(-1).close.toFixed(2)}
+        </text>
+      </svg>
+
+      {/* Hover tooltip */}
+      {hov && (
+        <div style={{
+          position:"absolute", top:8,
+          left: hoverIdx > candles.length*0.6 ? 70 : "auto",
+          right: hoverIdx <= candles.length*0.6 ? 16 : "auto",
+          background:"#0d1520ee", border:"1px solid #1e2d40",
+          borderRadius:6, padding:"10px 14px",
+          fontFamily:"'IBM Plex Mono',monospace", fontSize:11,
+          pointerEvents:"none", zIndex:10,
+          boxShadow:"0 4px 20px #000a",
+          minWidth:150,
+        }}>
+          <div style={{color:"#4a6a8a",marginBottom:6,fontSize:10}}>Candle #{hov.i}</div>
+          {[["Close",hov.close],["Open",hov.open],["High",hov.high],["Low",hov.low]].map(([l,v])=>(
+            <div key={l} style={{display:"flex",justifyContent:"space-between",gap:16,marginBottom:3}}>
+              <span style={{color:"#4a6a8a"}}>{l}:</span>
+              <span style={{color:"#e0eaf5",fontWeight:600}}>{fmtUSD(v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -136,16 +236,13 @@ const Tag = ({children, color}) => (
   <span style={{background:color+"22",color,border:`1px solid ${color}44`,borderRadius:3,padding:"1px 7px",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>{children}</span>
 );
 
-function LineTooltip({active, payload}) {
-  if (!active || !payload?.length) return null;
-  return <div style={{background:"#0d1520",border:"1px solid #1a2535",borderRadius:4,padding:"6px 10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#c8d6e5"}}>{fmtUSD(payload[0].value)}</div>;
-}
+
 
 function TickerRow({t, prices, selected, flash, onSelect}) {
   const p = prices[t], chg = p ? ((p.current-p.open)/p.open)*100 : 0;
   return (
     <div className="tr" onClick={onSelect} style={{padding:"9px 14px",borderBottom:"1px solid #0d1520",background:selected===t?"#0d1a26":"transparent",borderLeft:selected===t?"2px solid #00d4aa":"2px solid transparent",animation:flash[t]?"flash .5s":"none",cursor:"pointer"}}>
-      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#e0eaf5",fontWeight:600}}>{t}</div>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#e0eaf5",fontWeight:600}}>{t} <span style={{fontSize:9,color:"#3a5a7a",fontWeight:400}}>{COMPANY_NAMES[t]}</span></div>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#8ab0cc"}}>{fmtUSD(p?.current||0)}</span>
         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:clr(chg)}}>{fmtPct(chg)}</span>
@@ -502,7 +599,6 @@ export default function App() {
   const [selected, setSelected]     = useState("AAPL");
   const [qty,      setQty]          = useState("");
   const [tab,      setTab]          = useState("trade");
-  const [chartMode,setChartMode]    = useState("line");
   const [search,   setSearch]       = useState("");
   const [flash,    setFlash]        = useState({});
   const [notif,    setNotif]        = useState(null);
@@ -597,16 +693,69 @@ export default function App() {
     } catch(e) { console.error("LB fetch:", e); }
   }, []);
 
-  // ── Price tick every minute ──
+  // ── Price sync via Firestore (shared across all players) ──
   useEffect(() => {
-    const iv = setInterval(() => {
-      const next = tickPrices(priceRef.current);
-      setPrices(next);
-      priceRef.current = next;
-      setNextTick(Date.now() + PRICE_TICK_MS);
-    }, PRICE_TICK_MS);
+    const fb = fbRef.current;
+    if (!fb) return;
+
+    const syncPrices = async () => {
+      try {
+        const snap = await fb.getDoc(fb.doc(fb.db, "market", "prices"));
+        const now = Date.now();
+        if (snap.exists()) {
+          const d = snap.data();
+          const serverTime = d.updatedAt?.toMillis?.() || 0;
+          const age = now - serverTime;
+          // If server prices are fresh (written in last 35s), use them
+          if (age < 35000 && d.prices) {
+            // Apply server prices to local candles
+            setPrices(prev => {
+              const next = {};
+              ALL_TICKERS.forEach(t => {
+                const serverPrice = d.prices[t];
+                if (!serverPrice) { next[t] = prev[t]; return; }
+                const old = prev[t];
+                const last = old.candles.at(-1);
+                const close = serverPrice;
+                const h = +(Math.max(last.close, close) * (1 + Math.random()*0.003)).toFixed(2);
+                const l = +(Math.min(last.close, close) * (1 - Math.random()*0.003)).toFixed(2);
+                next[t] = {
+                  candles: [...old.candles.slice(-59), {i:last.i+1, open:last.close, close, high:h, low:l}],
+                  current: close, open: old.open,
+                };
+              });
+              priceRef.current = next;
+              return next;
+            });
+            setNextTick(serverTime + PRICE_TICK_MS);
+            return;
+          }
+        }
+        // We are the first — generate new prices and write to Firestore
+        const next = tickPrices(priceRef.current);
+        const priceMap = {};
+        ALL_TICKERS.forEach(t => { priceMap[t] = next[t].current; });
+        setPrices(next);
+        priceRef.current = next;
+        setNextTick(now + PRICE_TICK_MS);
+        await fb.setDoc(fb.doc(fb.db, "market", "prices"), {
+          prices: priceMap,
+          updatedAt: fb.serverTimestamp(),
+        });
+      } catch(e) {
+        // Fallback: local tick
+        const next = tickPrices(priceRef.current);
+        setPrices(next);
+        priceRef.current = next;
+        setNextTick(Date.now() + PRICE_TICK_MS);
+      }
+    };
+
+    // Initial load from server
+    syncPrices();
+    const iv = setInterval(syncPrices, PRICE_TICK_MS);
     return () => clearInterval(iv);
-  }, []);
+  }, [fbState]);
 
   // ── Leaderboard poll ──
   useEffect(() => {
@@ -664,10 +813,9 @@ export default function App() {
     setSignInLoading(true);
     setFbError(null);
     try {
-      // Check if display name is already taken in Firestore
-      const nameSnap = await fb.getDocs(fb.collection(fb.db, "usernames"));
-      const taken = nameSnap.docs.map(d => d.id.toLowerCase());
-      if (taken.includes(trimmed.toLowerCase())) {
+      // Check if display name is already taken (read single doc, not full collection)
+      const nameDoc = await fb.getDoc(fb.doc(fb.db, "usernames", trimmed.toLowerCase()));
+      if (nameDoc.exists()) {
         setFbError(`"${trimmed}" is already taken. Please choose a different name.`);
         setSignInLoading(false);
         return;
@@ -768,8 +916,6 @@ export default function App() {
   const dayChangePct = sel.open ? (dayChange/sel.open)*100 : 0;
   const totalValue   = getTotalValue();
   const totalPnL     = totalValue - STARTING_CASH;
-  const lineData     = sel.candles.map(c=>({t:c.i, price:c.close}));
-  const lastCandle   = sel.candles.at(-1);
   const myRank       = leaderboard.findIndex(r=>r.id===user.uid)+1;
   const filtered     = search ? ALL_TICKERS.filter(t=>t.includes(search.toUpperCase())) : null;
 
@@ -871,47 +1017,20 @@ export default function App() {
               {/* Header */}
               <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:20,flexWrap:"wrap"}}>
                 <div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5",letterSpacing:2}}>{selected}</div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · <span style={{color:"#00d4aa88"}}>⟳ Stocks update every 30 seconds</span></div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5",letterSpacing:2}}>
+                    {selected}<span style={{fontSize:14,color:"#4a6a8a",fontWeight:400,marginLeft:10}}>({COMPANY_NAMES[selected]||""})</span>
+                  </div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · <span style={{color:"#00d4aa88"}}>⟳ Prices sync every 30 seconds</span></div>
                 </div>
                 <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:34,fontWeight:700,color:"#e0eaf5",marginBottom:2}}>{fmtUSD(sel.current)}</span>
                 <Tag color={clr(dayChange)}>{dayChange>=0?"▲":"▼"} {fmtUSD(Math.abs(dayChange))} ({fmtPct(dayChangePct)})</Tag>
                 {portfolio[selected]>0 && <Tag color="#7b9dbe">HELD: {portfolio[selected]}</Tag>}
               </div>
 
-              {/* Chart toggle */}
-              <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center"}}>
-                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a"}}>CHART:</span>
-                <button className={`ctog ${chartMode==="line"?"on":""}`} onClick={()=>setChartMode("line")}>LINE</button>
-                <button className={`ctog ${chartMode==="candle"?"on":""}`} onClick={()=>setChartMode("candle")}>CANDLE</button>
-              </div>
-
               {/* Chart */}
-              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:chartMode==="line"?"14px 8px 8px":"10px",marginBottom:chartMode==="candle"?0:24,height:320,overflow:"hidden"}}>
-                {chartMode==="line"
-                  ? <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={lineData}>
-                        <XAxis dataKey="t" hide/><YAxis domain={["auto","auto"]} hide/>
-                        <Tooltip content={<LineTooltip/>}/>
-                        <ReferenceLine y={sel.open} stroke="#1e3a5a" strokeDasharray="4 4"/>
-                        <Line type="monotone" dataKey="price" stroke={clr(dayChange)} strokeWidth={2} dot={false} style={{filter:`drop-shadow(0 0 4px ${clr(dayChange)}88)`}}/>
-                      </LineChart>
-                    </ResponsiveContainer>
-                  : <CandlestickChart candles={sel.candles} width={Math.max(100,chartW-20)} height={300}/>
-                }
+              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"8px 8px 4px 0",marginBottom:20,overflow:"hidden"}}>
+                <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(200,chartW)} height={300}/>
               </div>
-
-              {/* OHLC strip (candle mode) */}
-              {chartMode==="candle" && lastCandle && (
-                <div style={{display:"flex",gap:18,marginBottom:18,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,padding:"7px 12px",background:"#0a0f14",border:"1px solid #1a2535",borderTop:"none",borderRadius:"0 0 8px 8px",flexWrap:"wrap"}}>
-                  {[["O",lastCandle.open],["H",lastCandle.high],["L",lastCandle.low],["C",lastCandle.close]].map(([l,v])=>(
-                    <div key={l}><span style={{color:"#4a6a8a"}}>{l} </span><span style={{color:"#c8d6e5"}}>{fmtUSD(v)}</span></div>
-                  ))}
-                  <div style={{marginLeft:"auto",color:clr(lastCandle.close-lastCandle.open)}}>
-                    {lastCandle.close>=lastCandle.open?"▲":"▼"} {fmtPct(((lastCandle.close-lastCandle.open)/lastCandle.open)*100)}
-                  </div>
-                </div>
-              )}
 
               {/* Order panel */}
               <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:24,maxWidth:480}}>
