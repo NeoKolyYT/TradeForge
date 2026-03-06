@@ -374,11 +374,14 @@ export default function App() {
       .then((fb) => {
         setFbState(fb);
         fb.onAuthStateChanged(fb.auth, async u => {
-          setUser(u);
           setFbLoading(false);
           if (u) {
+            // Reload to get the latest displayName (important after updateProfile)
+            try { await u.reload(); } catch(_) {}
+            const freshUser = fb.auth.currentUser || u;
+            setUser(freshUser);
             try {
-              const snap = await fb.getDoc(fb.doc(fb.db, "players", u.uid));
+              const snap = await fb.getDoc(fb.doc(fb.db, "players", freshUser.uid));
               if (snap.exists()) {
                 const d = snap.data();
                 setCash(d.cash ?? STARTING_CASH);
@@ -386,6 +389,8 @@ export default function App() {
                 setTrades(d.trades ?? []);
               }
             } catch(e) { console.error("Load player:", e); }
+          } else {
+            setUser(null);
           }
         });
       })
@@ -490,18 +495,52 @@ export default function App() {
   const handleEmailSignUp = async (email, password, username) => {
     const fb = fbRef.current;
     if (!fb) return;
-    if (!username.trim()) return setFbError("Please enter a display name.");
+    const trimmed = username.trim();
+    if (!trimmed) return setFbError("Please enter a display name.");
+    if (trimmed.length < 3) return setFbError("Display name must be at least 3 characters.");
+    if (trimmed.length > 20) return setFbError("Display name must be 20 characters or less.");
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) return setFbError("Display name can only contain letters, numbers, and underscores.");
     if (password.length < 6) return setFbError("Password must be at least 6 characters.");
     setSignInLoading(true);
     setFbError(null);
     try {
+      // Check if display name is already taken in Firestore
+      const nameSnap = await fb.getDocs(fb.collection(fb.db, "usernames"));
+      const taken = nameSnap.docs.map(d => d.id.toLowerCase());
+      if (taken.includes(trimmed.toLowerCase())) {
+        setFbError(`"${trimmed}" is already taken. Please choose a different name.`);
+        setSignInLoading(false);
+        return;
+      }
+      // Create the account
       const cred = await fb.createUserWithEmailAndPassword(fb.auth, email, password);
-      await fb.updateProfile(cred.user, { displayName: username.trim() });
+      // Update display name
+      await fb.updateProfile(cred.user, { displayName: trimmed });
+      // Reserve the username in Firestore
+      await fb.setDoc(fb.doc(fb.db, "usernames", trimmed.toLowerCase()), {
+        uid: cred.user.uid, displayName: trimmed, createdAt: fb.serverTimestamp()
+      });
+      // Initialize player data
+      await fb.setDoc(fb.doc(fb.db, "players", cred.user.uid), {
+        cash: STARTING_CASH, portfolio: {}, trades: [],
+        displayName: trimmed, photoURL: "", createdAt: fb.serverTimestamp()
+      });
+      // Initialize leaderboard entry
+      await fb.setDoc(fb.doc(fb.db, "leaderboard", cred.user.uid), {
+        name: trimmed, photoURL: "", value: STARTING_CASH,
+        pnl: 0, updatedAt: fb.serverTimestamp()
+      });
+      // Manually set the user state so the app transitions immediately
+      // (onAuthStateChanged may have fired before displayName was set)
+      setCash(STARTING_CASH);
+      setPortfolio({});
+      setTrades([]);
+      setUser({ ...cred.user, displayName: trimmed });
     } catch(e) {
       const msgs = {
         "auth/email-already-in-use": "An account with this email already exists.",
         "auth/invalid-email":        "Invalid email address.",
-        "auth/weak-password":        "Password is too weak.",
+        "auth/weak-password":        "Password is too weak (min 6 characters).",
       };
       setFbError(msgs[e.code] || e.message || "Sign-up failed.");
     }
@@ -562,6 +601,7 @@ export default function App() {
   // ─── Render gates ───────────────────────────────────────────────────────────
   if (fbLoading) return <Spinner msg="LOADING TRADEFORGE..." />;
   if (!user)     return <SignInScreen onEmailSignIn={handleEmailSignIn} onEmailSignUp={handleEmailSignUp} onGoogleSignIn={handleGoogleSignIn} error={fbError} loading={signInLoading}/>;
+  // Smooth fade-in when entering the app
 
   const sel          = prices[selected] || {candles:[], current:0, open:0};
   const dayChange    = sel.current - sel.open;
@@ -574,7 +614,7 @@ export default function App() {
   const filtered     = search ? ALL_TICKERS.filter(t=>t.includes(search.toUpperCase())) : null;
 
   return (
-    <div style={{height:"100vh",width:"100vw",maxWidth:"100%",background:"#080c10",color:"#c8d6e5",fontFamily:"'IBM Plex Sans','Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden",position:"fixed",top:0,left:0}}>
+    <div style={{height:"100vh",width:"100vw",maxWidth:"100%",background:"#080c10",color:"#c8d6e5",fontFamily:"'IBM Plex Sans','Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden",position:"fixed",top:0,left:0,animation:"appFadeIn .5s ease"}}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet"/>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
@@ -597,6 +637,7 @@ export default function App() {
         @keyframes slideIn{from{transform:translateY(-14px);opacity:0}to{transform:translateY(0);opacity:1}}
         @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
         .sector-lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:#2a4a6a;letter-spacing:2px;padding:8px 14px 4px;border-bottom:1px solid #0d1520}
+        @keyframes appFadeIn{from{opacity:0;transform:scale(0.99)}to{opacity:1;transform:scale(1)}}
       `}</style>
 
       {/* ── TOP BAR ── */}
