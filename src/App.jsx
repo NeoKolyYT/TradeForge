@@ -24,33 +24,63 @@ const STARTING_CASH       = 10000;
 const PRICE_TICK_MS       = 30_000;
 const LEADERBOARD_SYNC_MS = 15_000;
 
-const ALL_TICKERS = [
-  "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","NFLX","AMD","INTC","CRM","ORCL","ADBE","QCOM","UBER",
-  "JPM","BAC","GS","V","MA",
-  "SPY","QQQ","DIA","IWM",
-  "DIS","NKE","KO","PEP","WMT","MCD","XOM","JNJ","PFE","BA",
-];
 const SECTORS = {
-  "TECH":    ["AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","NFLX","AMD","INTC","CRM","ORCL","ADBE","QCOM","UBER"],
-  "FINANCE": ["JPM","BAC","GS","V","MA"],
-  "ETFs":    ["SPY","QQQ","DIA","IWM"],
-  "OTHER":   ["DIS","NKE","KO","PEP","WMT","MCD","XOM","JNJ","PFE","BA"],
+  "🖥 TECH":       ["AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA","NFLX","AMD","INTC","CRM","ORCL","ADBE","QCOM","UBER","SHOP","SNOW","PLTR","RBLX","SPOT"],
+  "💰 FINANCE":    ["JPM","BAC","GS","V","MA","MS","C","WFC","AXP","BLK","SCHW","COF","USB","PNC","ICE"],
+  "🏥 HEALTHCARE": ["JNJ","PFE","UNH","ABBV","MRK","BMY","LLY","CVS","MDT","ISRG"],
+  "🛒 CONSUMER":   ["WMT","MCD","KO","PEP","NKE","DIS","SBUX","TGT","COST","HD","LOW","YUM","CMG","ROST","DG"],
+  "⚡ ENERGY":     ["XOM","CVX","COP","SLB","OXY","PSX","VLO","EOG","PXD","HAL"],
+  "🏭 INDUSTRIAL": ["BA","GE","CAT","HON","MMM","LMT","RTX","DE","UPS","FDX"],
+  "📡 ETFs":       ["SPY","QQQ","DIA","IWM","VTI","ARKK","GLD","TLT","XLF","XLE"],
 };
+const ALL_TICKERS = Object.values(SECTORS).flat();
 const BASES = {
+  // TECH
   AAPL:189,MSFT:415,GOOGL:175,AMZN:195,META:510,NVDA:875,TSLA:248,NFLX:628,
   AMD:178,INTC:42,CRM:298,ORCL:145,ADBE:520,QCOM:168,UBER:74,
-  JPM:195,BAC:38,GS:465,V:278,MA:464,
-  SPY:523,QQQ:447,DIA:395,IWM:208,
-  DIS:112,NKE:88,KO:62,PEP:175,WMT:88,MCD:295,XOM:118,JNJ:165,PFE:29,BA:175,
+  SHOP:78,SNOW:165,PLTR:22,RBLX:38,SPOT:245,
+  // FINANCE
+  JPM:195,BAC:38,GS:465,V:278,MA:464,MS:98,C:62,WFC:55,AXP:195,BLK:820,
+  SCHW:72,COF:145,USB:44,PNC:152,ICE:138,
+  // HEALTHCARE
+  JNJ:165,PFE:29,UNH:520,ABBV:165,MRK:125,BMY:52,LLY:780,CVS:72,MDT:88,ISRG:395,
+  // CONSUMER
+  WMT:88,MCD:295,KO:62,PEP:175,NKE:88,DIS:112,SBUX:98,TGT:142,COST:745,
+  HD:345,LOW:218,YUM:132,CMG:2250,ROST:148,DG:148,
+  // ENERGY
+  XOM:118,CVX:158,COP:118,SLB:48,OXY:62,PSX:148,VLO:162,EOG:122,PXD:225,HAL:38,
+  // INDUSTRIAL
+  BA:175,GE:128,CAT:318,HON:198,MMM:108,LMT:458,RTX:98,DE:385,UPS:148,FDX:248,
+  // ETFs
+  SPY:523,QQQ:447,DIA:395,IWM:208,VTI:245,ARKK:48,GLD:185,TLT:95,XLF:38,XLE:88,
 };
 const COMPANY_NAMES = {
+  // TECH
   AAPL:"Apple",MSFT:"Microsoft",GOOGL:"Alphabet",AMZN:"Amazon",META:"Meta",
   NVDA:"NVIDIA",TSLA:"Tesla",NFLX:"Netflix",AMD:"AMD",INTC:"Intel",
   CRM:"Salesforce",ORCL:"Oracle",ADBE:"Adobe",QCOM:"Qualcomm",UBER:"Uber",
+  SHOP:"Shopify",SNOW:"Snowflake",PLTR:"Palantir",RBLX:"Roblox",SPOT:"Spotify",
+  // FINANCE
   JPM:"JPMorgan",BAC:"Bank of America",GS:"Goldman Sachs",V:"Visa",MA:"Mastercard",
-  SPY:"S&P 500 ETF",QQQ:"Nasdaq ETF",DIA:"Dow Jones ETF",IWM:"Russell 2000 ETF",
-  DIS:"Disney",NKE:"Nike",KO:"Coca-Cola",PEP:"PepsiCo",WMT:"Walmart",
-  MCD:"McDonald's",XOM:"ExxonMobil",JNJ:"Johnson & Johnson",PFE:"Pfizer",BA:"Boeing",
+  MS:"Morgan Stanley",C:"Citigroup",WFC:"Wells Fargo",AXP:"American Express",BLK:"BlackRock",
+  SCHW:"Charles Schwab",COF:"Capital One",USB:"U.S. Bancorp",PNC:"PNC Financial",ICE:"Intercontinental Exchange",
+  // HEALTHCARE
+  UNH:"UnitedHealth",ABBV:"AbbVie",MRK:"Merck",BMY:"Bristol-Myers",LLY:"Eli Lilly",
+  CVS:"CVS Health",MDT:"Medtronic",ISRG:"Intuitive Surgical",
+  // CONSUMER
+  WMT:"Walmart",MCD:"McDonald's",KO:"Coca-Cola",PEP:"PepsiCo",NKE:"Nike",
+  DIS:"Disney",SBUX:"Starbucks",TGT:"Target",COST:"Costco",HD:"Home Depot",
+  LOW:"Lowe's",YUM:"Yum! Brands",CMG:"Chipotle",ROST:"Ross Stores",DG:"Dollar General",
+  // ENERGY
+  XOM:"ExxonMobil",CVX:"Chevron",COP:"ConocoPhillips",SLB:"SLB",OXY:"Occidental",
+  PSX:"Phillips 66",VLO:"Valero",EOG:"EOG Resources",PXD:"Pioneer Natural",HAL:"Halliburton",
+  // INDUSTRIAL
+  BA:"Boeing",GE:"GE Aerospace",CAT:"Caterpillar",HON:"Honeywell",MMM:"3M",
+  LMT:"Lockheed Martin",RTX:"RTX Corp",DE:"John Deere",UPS:"UPS",FDX:"FedEx",
+  // ETFs
+  SPY:"S&P 500 ETF",QQQ:"Nasdaq ETF",DIA:"Dow Jones ETF",IWM:"Russell 2000",
+  VTI:"Total Market ETF",ARKK:"ARK Innovation",GLD:"Gold ETF",TLT:"Treasury Bond ETF",
+  XLF:"Financial ETF",XLE:"Energy ETF",
 };
 
 // ─── Utils ─────────────────────────────────────────────────────────────────────
