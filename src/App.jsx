@@ -115,35 +115,28 @@ function initFirebase() {
 }
 
 // ─── Google Finance-style Area Chart ──────────────────────────────────────────
-function StockChart({ candles, isUp, width=600, height=300 }) {
+function StockChart({ candles, isUp, width=600, height=220 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   if (!candles?.length) return null;
 
-  const pad = {l:0, r:64, t:14, b:14};
-  const iW = width-pad.r, iH = height-pad.t-pad.b;
+  const pad = {l:58, r:70, t:16, b:16};
+  const iW = width-pad.l-pad.r, iH = height-pad.t-pad.b;
   const prices = candles.map(c=>c.close);
   const yMax = Math.max(...prices)*1.002;
   const yMin = Math.min(...prices)*0.998;
   const yr = yMax-yMin || 1;
   const toY = v => pad.t + iH - ((v-yMin)/yr)*iH;
-  const toX = i => (i/(candles.length-1))*iW;
+  const toX = i => pad.l + (i/(candles.length-1))*iW;
 
-  const color = isUp ? "#ef5350" : "#26a69a";
-  const colorLight = isUp ? "#ef535033" : "#26a69a33";
-
-  // Build SVG path
+  const color = isUp ? "#26a69a" : "#ef5350";
   const pts = candles.map((c,i) => `${toX(i)},${toY(c.close)}`);
   const linePath = `M${pts.join("L")}`;
-  const areaPath = `M0,${pad.t+iH}L${pts.join("L")}L${iW},${pad.t+iH}Z`;
-
-  // Y axis labels
+  const areaPath = `M${pad.l},${pad.t+iH}L${pts.join("L")}L${toX(candles.length-1)},${pad.t+iH}Z`;
   const yTicks = 5;
   const yLabels = Array.from({length:yTicks}, (_,i) => {
     const v = yMin + (yr * i/(yTicks-1));
     return {v, y: toY(v)};
   });
-
-  // Hover candle
   const hov = hoverIdx !== null ? candles[hoverIdx] : null;
 
   return (
@@ -162,61 +155,49 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
       >
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
+            <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
             <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
           </linearGradient>
         </defs>
-
         {/* Grid lines */}
         {yLabels.map(({y},i)=>(
-          <line key={i} x1={0} y1={y} x2={iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
+          <line key={i} x1={pad.l} y1={y} x2={pad.l+iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
         ))}
-
-        {/* Y axis labels - overlaid on left side of chart */}
+        {/* Y axis labels */}
         {yLabels.map(({v,y})=>(
-          <text key={v} x={8} y={y+4} textAnchor="start" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
-            {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}
+          <text key={v} x={pad.l-8} y={y+4} textAnchor="end" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
+            {v.toFixed(2)}
           </text>
         ))}
-
         {/* Area fill */}
         <path d={areaPath} fill="url(#areaGrad)"/>
-
         {/* Line */}
-        <path d={linePath} fill="none" stroke={color} strokeWidth={1.8}
-          style={{filter:`drop-shadow(0 0 3px ${color}88)`}}/>
-
-        {/* Hover vertical line */}
+        <path d={linePath} fill="none" stroke={color} strokeWidth={1.8} style={{filter:`drop-shadow(0 0 3px ${color}88)`}}/>
+        {/* Hover line */}
         {hoverIdx!==null && (
-          <line x1={toX(hoverIdx)} y1={pad.t} x2={toX(hoverIdx)} y2={pad.t+iH}
-            stroke="#4a6a8a" strokeWidth={1} strokeDasharray="3 3"/>
+          <line x1={toX(hoverIdx)} y1={pad.t} x2={toX(hoverIdx)} y2={pad.t+iH} stroke="#4a6a8a" strokeWidth={1} strokeDasharray="3 3"/>
         )}
-
         {/* Hover dot */}
         {hoverIdx!==null && (
-          <circle cx={toX(hoverIdx)} cy={toY(candles[hoverIdx].close)} r={4}
-            fill={color} stroke="#080c10" strokeWidth={2}/>
+          <circle cx={toX(hoverIdx)} cy={toY(candles[hoverIdx].close)} r={4} fill={color} stroke="#080c10" strokeWidth={2}/>
         )}
-
-        {/* Current price label - sits inside right padding */}
-        <rect x={iW+4} y={toY(candles.at(-1).close)-9} width={52} height={18} rx={3} fill={color}/>
-        <text x={iW+30} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
+        {/* Current price label */}
+        <rect x={pad.l+iW+4} y={toY(candles.at(-1).close)-9} width={58} height={18} rx={3} fill={color}/>
+        <text x={pad.l+iW+33} y={toY(candles.at(-1).close)+4} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="700" fontFamily="'IBM Plex Mono',monospace">
           {candles.at(-1).close.toFixed(2)}
         </text>
       </svg>
-
       {/* Hover tooltip */}
       {hov && (
         <div style={{
           position:"absolute", top:8,
-          left: hoverIdx > candles.length*0.6 ? 70 : "auto",
-          right: hoverIdx <= candles.length*0.6 ? 16 : "auto",
+          left: hoverIdx > candles.length*0.6 ? 66 : "auto",
+          right: hoverIdx <= candles.length*0.6 ? 80 : "auto",
           background:"#0d1520ee", border:"1px solid #1e2d40",
           borderRadius:6, padding:"10px 14px",
           fontFamily:"'IBM Plex Mono',monospace", fontSize:11,
           pointerEvents:"none", zIndex:10,
-          boxShadow:"0 4px 20px #000a",
-          minWidth:150,
+          boxShadow:"0 4px 20px #000a", minWidth:150,
         }}>
           <div style={{color:"#4a6a8a",marginBottom:6,fontSize:10}}>Candle #{hov.i}</div>
           {[["Close",hov.close],["Open",hov.open],["High",hov.high],["Low",hov.low]].map(([l,v])=>(
@@ -227,22 +208,11 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
           ))}
         </div>
       )}
-      {/* NK Productions watermark */}
-      <div style={{position:"fixed",bottom:8,right:12,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#1e3a5a",letterSpacing:1,pointerEvents:"none",userSelect:"none",zIndex:999}}>
-        NK Productions
-      </div>
     </div>
   );
 }
 
-// ─── UI Atoms ──────────────────────────────────────────────────────────────────
-const Tag = ({children, color}) => (
-  <span style={{background:color+"22",color,border:`1px solid ${color}44`,borderRadius:3,padding:"1px 7px",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>{children}</span>
-);
-
-
-
-function TickerRow({t, prices, selected, flash, onSelect}) {
+function TickerRowfunction TickerRow({t, prices, selected, flash, onSelect}) {
   const p = prices[t], chg = p ? ((p.current-p.open)/p.open)*100 : 0;
   return (
     <div className="tr" onClick={onSelect} style={{padding:"9px 14px",borderBottom:"1px solid #0d1520",background:selected===t?"#0d1a26":"transparent",borderLeft:selected===t?"2px solid #00d4aa":"2px solid transparent",animation:flash[t]?"flash .5s":"none",cursor:"pointer"}}>
@@ -1036,7 +1006,7 @@ export default function App() {
               </div>
 
               {/* Chart */}
-              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,marginBottom:20,overflow:"hidden"}}>
+              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"4px 0",marginBottom:20,overflow:"hidden"}}>
                 <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(400,chartW)} height={220}/>
               </div>
 
