@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+} from "firebase/auth";
+import {
+  getFirestore, doc, getDoc, setDoc, collection, getDocs, serverTimestamp,
+} from "firebase/firestore";
 
 // ─── Firebase Config ───────────────────────────────────────────────────────────
 const FIREBASE_CONFIG = {
@@ -83,30 +91,16 @@ function tickPrices(prev) {
   return next;
 }
 
-// ─── Firebase loader (ES module imports via esm.sh) ───────────────────────────
-async function initFirebase() {
-  const [appMod, authMod, fsMod] = await Promise.all([
-    import("https://esm.sh/firebase@10.12.0/app"),
-    import("https://esm.sh/firebase@10.12.0/auth"),
-    import("https://esm.sh/firebase@10.12.0/firestore"),
-  ]);
-
-  const { initializeApp, getApps, getApp } = appMod;
-  const {
-    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-    createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-  } = authMod;
-  const { getFirestore, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp } = fsMod;
-
+// ─── Firebase init (uses npm package, no dynamic loading needed) ──────────────
+function initFirebase() {
   const app  = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
   const auth = getAuth(app);
   const db   = getFirestore(app);
-
   return {
     app, auth, db,
     GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
     createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-    doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp,
+    doc, getDoc, setDoc, collection, getDocs, serverTimestamp,
   };
 }
 
@@ -370,35 +364,33 @@ export default function App() {
 
   // ── Boot Firebase ──
   useEffect(() => {
-    initFirebase()
-      .then((fb) => {
-        setFbState(fb);
-        fb.onAuthStateChanged(fb.auth, async u => {
-          setFbLoading(false);
-          if (u) {
-            // Reload to get the latest displayName (important after updateProfile)
-            try { await u.reload(); } catch(_) {}
-            const freshUser = fb.auth.currentUser || u;
-            setUser(freshUser);
-            try {
-              const snap = await fb.getDoc(fb.doc(fb.db, "players", freshUser.uid));
-              if (snap.exists()) {
-                const d = snap.data();
-                setCash(d.cash ?? STARTING_CASH);
-                setPortfolio(d.portfolio ?? {});
-                setTrades(d.trades ?? []);
-              }
-            } catch(e) { console.error("Load player:", e); }
-          } else {
-            setUser(null);
-          }
-        });
-      })
-      .catch(err => {
-        console.error("Firebase boot error:", err);
-        setFbError(err.message || "Could not connect to Firebase. Check your internet connection.");
+    try {
+      const fb = initFirebase();
+      setFbState(fb);
+      fb.onAuthStateChanged(fb.auth, async u => {
         setFbLoading(false);
+        if (u) {
+          try { await u.reload(); } catch(_) {}
+          const freshUser = fb.auth.currentUser || u;
+          setUser(freshUser);
+          try {
+            const snap = await fb.getDoc(fb.doc(fb.db, "players", freshUser.uid));
+            if (snap.exists()) {
+              const d = snap.data();
+              setCash(d.cash ?? STARTING_CASH);
+              setPortfolio(d.portfolio ?? {});
+              setTrades(d.trades ?? []);
+            }
+          } catch(e) { console.error("Load player:", e); }
+        } else {
+          setUser(null);
+        }
       });
+    } catch(err) {
+      console.error("Firebase boot error:", err);
+      setFbError(err.message || "Could not connect to Firebase.");
+      setFbLoading(false);
+    }
   }, []);
 
   // ── Save to Firestore ──
