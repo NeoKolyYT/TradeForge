@@ -1079,6 +1079,7 @@ export default function App() {
             <polyline points="8,16 12,12 16,15 20,10" stroke="#00d4aa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,letterSpacing:2,color:"#e0eaf5",fontWeight:700}}>TradeForge</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#2a4a6a",letterSpacing:1}}>Stocks({ALL_TICKERS.length})</span>
           <div style={{width:6,height:6,borderRadius:"50%",background:"#00d4aa",boxShadow:"0 0 6px #00d4aa",animation:"pulse 2s infinite"}}/>
           {myRank>0 && <Tag color="#7b9dbe">RANK #{myRank}</Tag>}
           {saving && <Tag color="#f5a623">SAVING</Tag>}
@@ -1116,20 +1117,46 @@ export default function App() {
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
         {/* ── SIDEBAR ── */}
-        <div style={{width:200,borderRight:"1px solid #1a2535",overflowY:"auto",flexShrink:0}}>
+        <div style={{width:200,borderRight:"1px solid #1a2535",overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
+          {/* Search box */}
           <div style={{padding:"8px 10px",borderBottom:"1px solid #1a2535",position:"sticky",top:0,background:"#080c10",zIndex:2}}>
-            <input placeholder="Search ticker..." value={search} onChange={e=>setSearch(e.target.value)}
+            <input placeholder="Ticker or category..." value={search} onChange={e=>setSearch(e.target.value)}
               style={{width:"100%",background:"#0d1520",border:"1px solid #1a2535",color:"#c8d6e5",borderRadius:4,padding:"5px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",boxSizing:"border-box"}}/>
           </div>
-          {filtered
-            ? filtered.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>)
-            : Object.entries(SECTORS).map(([lbl,tks])=>(
+          {/* Results */}
+          {(() => {
+            if (!search) {
+              // Show all sectors normally
+              return Object.entries(SECTORS).map(([lbl,tks])=>(
                 <div key={lbl}>
                   <div className="sector-lbl">— {lbl} —</div>
                   {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>)}
                 </div>
-              ))
-          }
+              ));
+            }
+            const q = search.toUpperCase();
+            const qLower = search.toLowerCase();
+            // Check if query matches a category name
+            const matchedSectors = Object.entries(SECTORS).filter(([lbl]) =>
+              lbl.toLowerCase().includes(qLower) || lbl.replace(/[^a-zA-Z ]/g,"").toLowerCase().includes(qLower)
+            );
+            if (matchedSectors.length > 0) {
+              return matchedSectors.map(([lbl,tks])=>(
+                <div key={lbl}>
+                  <div className="sector-lbl">— {lbl} —</div>
+                  {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>)}
+                </div>
+              ));
+            }
+            // Otherwise search by ticker or company name
+            const byTicker = ALL_TICKERS.filter(t => t.includes(q));
+            const byName   = ALL_TICKERS.filter(t => !t.includes(q) && (COMPANY_NAMES[t]||"").toUpperCase().includes(q));
+            const results  = [...byTicker, ...byName];
+            if (results.length === 0) return (
+              <div style={{padding:"20px 14px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#3a5a7a",textAlign:"center"}}>No results for "{search}"</div>
+            );
+            return results.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>);
+          })()}
         </div>
 
         {/* ── MAIN ── */}
