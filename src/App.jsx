@@ -813,33 +813,37 @@ export default function App() {
     setSignInLoading(true);
     setFbError(null);
     try {
-      // Check if display name is already taken (read single doc, not full collection)
+      // Step 1: Create Firebase Auth account first (now we're authenticated)
+      const cred = await fb.createUserWithEmailAndPassword(fb.auth, email, password);
+
+      // Step 2: Now authenticated — check if username is taken
       const nameDoc = await fb.getDoc(fb.doc(fb.db, "usernames", trimmed.toLowerCase()));
       if (nameDoc.exists()) {
+        // Username taken — delete the account we just made and bail
+        await cred.user.delete();
         setFbError(`"${trimmed}" is already taken. Please choose a different name.`);
         setSignInLoading(false);
         return;
       }
-      // Create the account
-      const cred = await fb.createUserWithEmailAndPassword(fb.auth, email, password);
-      // Update display name
+
+      // Step 3: Set display name
       await fb.updateProfile(cred.user, { displayName: trimmed });
-      // Reserve the username in Firestore
+
+      // Step 4: Write all Firestore docs (now authenticated, no permissions error)
+      const ts = fb.serverTimestamp();
       await fb.setDoc(fb.doc(fb.db, "usernames", trimmed.toLowerCase()), {
-        uid: cred.user.uid, displayName: trimmed, createdAt: fb.serverTimestamp()
+        uid: cred.user.uid, displayName: trimmed, createdAt: ts,
       });
-      // Initialize player data
       await fb.setDoc(fb.doc(fb.db, "players", cred.user.uid), {
         cash: STARTING_CASH, portfolio: {}, trades: [],
-        displayName: trimmed, photoURL: "", createdAt: fb.serverTimestamp()
+        displayName: trimmed, photoURL: "", createdAt: ts,
       });
-      // Initialize leaderboard entry
       await fb.setDoc(fb.doc(fb.db, "leaderboard", cred.user.uid), {
         name: trimmed, photoURL: "", value: STARTING_CASH,
-        pnl: 0, updatedAt: fb.serverTimestamp()
+        cash: STARTING_CASH, pnl: 0, private: false, updatedAt: ts,
       });
-      // Manually set the user state so the app transitions immediately
-      // (onAuthStateChanged may have fired before displayName was set)
+
+      // Step 5: Transition into the app
       setCash(STARTING_CASH);
       setPortfolio({});
       setTrades([]);
@@ -848,7 +852,7 @@ export default function App() {
       const msgs = {
         "auth/email-already-in-use": "An account with this email already exists.",
         "auth/invalid-email":        "Invalid email address.",
-        "auth/weak-password":        "Password is too weak (min 6 characters).",
+        "auth/weak-password":        "Password is too weak — use at least 6 characters.",
       };
       setFbError(msgs[e.code] || e.message || "Sign-up failed.");
     }
@@ -1028,8 +1032,8 @@ export default function App() {
               </div>
 
               {/* Chart */}
-              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"8px 8px 4px 0",marginBottom:20,overflow:"hidden"}}>
-                <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(200,chartW)} height={300}/>
+              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"12px 8px 8px 0",marginBottom:20,overflow:"hidden"}}>
+                <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(400,chartW)} height={220}/>
               </div>
 
               {/* Order panel */}
