@@ -119,7 +119,7 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   if (!candles?.length) return null;
 
-  const pad = {l:54, r:60, t:12, b:12};
+  const pad = {l:2, r:64, t:14, b:14};
   const iW = width-pad.l-pad.r, iH = height-pad.t-pad.b;
   const prices = candles.map(c=>c.close);
   const yMax = Math.max(...prices)*1.002;
@@ -151,8 +151,7 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
       <svg
         width="100%" height={height}
         viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        style={{display:"block",cursor:"crosshair",width:"100%"}}
+        style={{display:"block",cursor:"crosshair"}}
         onMouseLeave={()=>setHoverIdx(null)}
         onMouseMove={e=>{
           const rect=e.currentTarget.getBoundingClientRect();
@@ -173,9 +172,9 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
           <line key={i} x1={pad.l} y1={y} x2={pad.l+iW} y2={y} stroke="#1a2535" strokeWidth={0.5} strokeDasharray="4 4"/>
         ))}
 
-        {/* Y axis labels */}
+        {/* Y axis labels - overlaid on left side of chart */}
         {yLabels.map(({v,y})=>(
-          <text key={v} x={pad.l-8} y={y+4} textAnchor="end" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
+          <text key={v} x={pad.l+8} y={y+4} textAnchor="start" fill="#3a5a7a" fontSize={10} fontFamily="'IBM Plex Mono',monospace">
             {v>=1000?`${(v/1000).toFixed(1)}k`:v.toFixed(2)}
           </text>
         ))}
