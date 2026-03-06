@@ -227,6 +227,10 @@ function StockChart({ candles, isUp, width=600, height=300 }) {
           ))}
         </div>
       )}
+      {/* NK Productions watermark */}
+      <div style={{position:"fixed",bottom:8,right:12,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#1e3a5a",letterSpacing:1,pointerEvents:"none",userSelect:"none",zIndex:999}}>
+        NK Productions
+      </div>
     </div>
   );
 }
