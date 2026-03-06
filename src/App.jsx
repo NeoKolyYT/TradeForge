@@ -85,20 +85,27 @@ function tickPrices(prev) {
 
 // ─── Firebase loader (ES module imports via esm.sh) ───────────────────────────
 async function initFirebase() {
-  const [
-    { initializeApp, getApps },
-    { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged },
-    { getFirestore, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp },
-  ] = await Promise.all([
+  const [appMod, authMod, fsMod] = await Promise.all([
     import("https://esm.sh/firebase@10.12.0/app"),
     import("https://esm.sh/firebase@10.12.0/auth"),
     import("https://esm.sh/firebase@10.12.0/firestore"),
   ]);
 
-  const app  = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
-  const auth = getAuth(app);
-  const db   = getFirestore(app);
+  const { initializeApp, getApps } = appMod;
+  const { initializeAuth, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
+  const { getFirestore, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp } = fsMod;
 
+  const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+
+  let auth;
+  try {
+    auth = initializeAuth(app, { popupRedirectResolver: browserPopupRedirectResolver });
+  } catch(e) {
+    const { getAuth } = authMod;
+    auth = getAuth(app);
+  }
+
+  const db = getFirestore(app);
   return { app, auth, db, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp };
 }
 
@@ -170,7 +177,7 @@ function Countdown({nextTick}) {
 // ─── Sign-In Screen ────────────────────────────────────────────────────────────
 function SignInScreen({onSignIn, error, loading}) {
   return (
-    <div style={{minHeight:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'IBM Plex Sans',sans-serif"}}>
+    <div style={{width:"100vw",height:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'IBM Plex Sans',sans-serif",overflow:"hidden"}}>
       <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:14,padding:"48px 52px",width:380,textAlign:"center",boxShadow:"0 24px 80px #000a"}}>
 
         {/* Logo */}
@@ -226,7 +233,7 @@ function SignInScreen({onSignIn, error, loading}) {
 
 function Spinner({msg="LOADING"}) {
   return (
-    <div style={{minHeight:"100vh",background:"#080c10",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+    <div style={{width:"100vw",height:"100vh",background:"#080c10",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <svg width="36" height="36" viewBox="0 0 28 28" fill="none">
         <polygon points="14,2 26,9 26,19 14,26 2,19 2,9" fill="#00d4aa22" stroke="#00d4aa" strokeWidth="1.5"/>
         <polyline points="8,16 12,12 16,15 20,10" stroke="#00d4aa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
@@ -441,7 +448,7 @@ export default function App() {
   const filtered     = search ? ALL_TICKERS.filter(t=>t.includes(search.toUpperCase())) : null;
 
   return (
-    <div style={{height:"100vh",width:"100vw",background:"#080c10",color:"#c8d6e5",fontFamily:"'IBM Plex Sans','Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    <div style={{height:"100vh",width:"100vw",maxWidth:"100%",background:"#080c10",color:"#c8d6e5",fontFamily:"'IBM Plex Sans','Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden",position:"fixed",top:0,left:0}}>
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet"/>
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0}
