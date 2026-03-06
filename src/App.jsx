@@ -91,21 +91,14 @@ async function initFirebase() {
     import("https://esm.sh/firebase@10.12.0/firestore"),
   ]);
 
-  const { initializeApp, getApps } = appMod;
-  const { initializeAuth, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
+  const { initializeApp, getApps, getApp } = appMod;
+  const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
   const { getFirestore, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp } = fsMod;
 
-  const app = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CONFIG);
+  const app = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
 
-  let auth;
-  try {
-    auth = initializeAuth(app, { popupRedirectResolver: browserPopupRedirectResolver });
-  } catch(e) {
-    const { getAuth } = authMod;
-    auth = getAuth(app);
-  }
-
-  const db = getFirestore(app);
   return { app, auth, db, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp };
 }
 
