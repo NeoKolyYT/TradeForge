@@ -92,14 +92,22 @@ async function initFirebase() {
   ]);
 
   const { initializeApp, getApps, getApp } = appMod;
-  const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
+  const {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+  } = authMod;
   const { getFirestore, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp } = fsMod;
 
-  const app = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
+  const app  = getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG);
   const auth = getAuth(app);
   const db   = getFirestore(app);
 
-  return { app, auth, db, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp };
+  return {
+    app, auth, db,
+    GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
+    doc, getDoc, setDoc, collection, orderBy, limit, getDocs, serverTimestamp,
+  };
 }
 
 // ─── Candlestick Chart ─────────────────────────────────────────────────────────
@@ -167,57 +175,142 @@ function Countdown({nextTick}) {
   );
 }
 
-// ─── Sign-In Screen ────────────────────────────────────────────────────────────
-function SignInScreen({onSignIn, error, loading}) {
+// ─── Auth Screen (Sign In + Sign Up) ──────────────────────────────────────────
+const Logo = () => (
+  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:6}}>
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <polygon points="14,2 26,9 26,19 14,26 2,19 2,9" fill="#00d4aa22" stroke="#00d4aa" strokeWidth="1.5"/>
+      <polyline points="8,16 12,12 16,15 20,10" stroke="#00d4aa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+    <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,letterSpacing:2,color:"#e0eaf5",fontWeight:700}}>TradeForge</span>
+  </div>
+);
+
+const GoogleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48">
+    <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 33.1 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 20-9 20-20 0-1.3-.1-2.7-.4-4z"/>
+    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.1l-6.2-5.2C29.4 35.5 26.8 36 24 36c-5.2 0-9.6-2.9-11.3-7.1l-6.5 5C9.6 39.6 16.3 44 24 44z"/>
+    <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.4-2.5 4.5-4.6 5.9l6.2 5.2C40.8 35.8 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/>
+  </svg>
+);
+
+function AuthInput({label, type, value, onChange, placeholder}) {
+  return (
+    <div style={{marginBottom:14,textAlign:"left"}}>
+      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:6}}>{label}</div>
+      <input
+        type={type} value={value} onChange={onChange} placeholder={placeholder}
+        style={{width:"100%",background:"#0d1520",border:"1px solid #1e2d40",color:"#e0eaf5",borderRadius:6,padding:"11px 14px",fontSize:14,fontFamily:"'IBM Plex Sans',sans-serif",outline:"none",boxSizing:"border-box",transition:"border-color .2s"}}
+        onFocus={e=>e.target.style.borderColor="#00d4aa55"}
+        onBlur={e=>e.target.style.borderColor="#1e2d40"}
+      />
+    </div>
+  );
+}
+
+function SignInScreen({onEmailSignIn, onEmailSignUp, onGoogleSignIn, error, loading}) {
+  const [mode,     setMode]     = useState("signin"); // "signin" | "signup"
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [animDir,  setAnimDir]  = useState(1); // 1 = slide left, -1 = slide right
+  const [visible,  setVisible]  = useState(true);
+
+  const switchMode = (next) => {
+    setAnimDir(next === "signup" ? 1 : -1);
+    setVisible(false);
+    setTimeout(() => { setMode(next); setVisible(true); }, 220);
+  };
+
+  const handleSubmit = () => {
+    if (mode === "signin") onEmailSignIn(email, password);
+    else onEmailSignUp(email, password, username);
+  };
+
+  const inputStyle = {
+    transform: visible ? "translateX(0)" : `translateX(${animDir * 30}px)`,
+    opacity: visible ? 1 : 0,
+    transition: "all 0.22s cubic-bezier(.4,0,.2,1)",
+  };
+
   return (
     <div style={{width:"100vw",height:"100vh",background:"#080c10",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'IBM Plex Sans',sans-serif",overflow:"hidden"}}>
-      <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:14,padding:"48px 52px",width:380,textAlign:"center",boxShadow:"0 24px 80px #000a"}}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        .auth-card{animation:fadeUp .3s ease}
+      `}</style>
+      <div className="auth-card" style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:14,padding:"40px 44px",width:400,boxShadow:"0 24px 80px #000c",overflow:"hidden"}}>
 
         {/* Logo */}
-        <div style={{marginBottom:6,display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <polygon points="14,2 26,9 26,19 14,26 2,19 2,9" fill="#00d4aa22" stroke="#00d4aa" strokeWidth="1.5"/>
-            <polyline points="8,16 12,12 16,15 20,10" stroke="#00d4aa" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,letterSpacing:2,color:"#e0eaf5",fontWeight:700}}>TradeForge</span>
-        </div>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#2a4a6a",letterSpacing:3,marginBottom:36}}>PAPER TRADING · MULTIPLAYER</div>
+        <Logo/>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#2a4a6a",letterSpacing:3,marginBottom:28,textAlign:"center"}}>PAPER TRADING · MULTIPLAYER</div>
 
-        <div style={{color:"#4a6a8a",fontSize:13,lineHeight:1.8,marginBottom:32}}>
-          Trade 34 stocks with fake money.<br/>
-          Start with <span style={{color:"#00d4aa",fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}>$10,000</span>. Same prices for all.<br/>
-          Compete on the global leaderboard.
-        </div>
-
-        <button
-          onClick={onSignIn}
-          disabled={loading}
-          style={{width:"100%",background:loading?"#1a2535":"#fff",color:"#1a1a1a",border:"none",borderRadius:8,padding:"14px 20px",fontSize:14,fontWeight:600,cursor:loading?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:12,transition:"all .2s",boxShadow:"0 2px 16px #00000055",opacity:loading?0.7:1}}
-          onMouseOver={e=>!loading&&(e.currentTarget.style.background="#f0f0f0")}
-          onMouseOut={e=>!loading&&(e.currentTarget.style.background="#fff")}
-        >
-          {loading ? (
-            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#00d4aa",letterSpacing:2}}>CONNECTING...</span>
-          ) : (<>
-            <svg width="20" height="20" viewBox="0 0 48 48">
-              <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 33.1 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 20-9 20-20 0-1.3-.1-2.7-.4-4z"/>
-              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
-              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.1l-6.2-5.2C29.4 35.5 26.8 36 24 36c-5.2 0-9.6-2.9-11.3-7.1l-6.5 5C9.6 39.6 16.3 44 24 44z"/>
-              <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.4-2.5 4.5-4.6 5.9l6.2 5.2C40.8 35.8 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/>
-            </svg>
-            Sign in with Google
-          </>)}
-        </button>
-
-        {error && (
-          <div style={{marginTop:16,background:"#ff4d6d18",border:"1px solid #ff4d6d44",borderRadius:6,padding:"10px 14px",color:"#ff4d6d",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",textAlign:"left",lineHeight:1.5}}>
-            ⚠ {error}
+        {/* Animated form */}
+        <div style={inputStyle}>
+          {/* Title */}
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#e0eaf5",fontWeight:700,marginBottom:20,textAlign:"center",letterSpacing:1}}>
+            {mode === "signin" ? "WELCOME BACK" : "CREATE ACCOUNT"}
           </div>
-        )}
 
-        <div style={{marginTop:24,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#1e3a5a",lineHeight:1.9}}>
-          Your progress syncs across devices<br/>
-          Leaderboard is live for all players
+          {/* Username field (signup only) */}
+          {mode === "signup" && (
+            <AuthInput label="DISPLAY NAME" type="text" value={username}
+              onChange={e=>setUsername(e.target.value)} placeholder="e.g. WallStreetKid"/>
+          )}
+
+          <AuthInput label="EMAIL" type="email" value={email}
+            onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
+
+          <AuthInput label="PASSWORD" type="password" value={password}
+            onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/>
+
+          {/* Submit button */}
+          <button
+            onClick={handleSubmit} disabled={loading}
+            style={{width:"100%",background:"#00d4aa22",color:"#00d4aa",border:"1px solid #00d4aa55",borderRadius:8,padding:"12px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",fontWeight:700,letterSpacing:2,cursor:loading?"wait":"pointer",transition:"all .15s",marginTop:4,marginBottom:16,opacity:loading?0.6:1}}
+            onMouseOver={e=>!loading&&(e.currentTarget.style.background="#00d4aa33")}
+            onMouseOut={e=>!loading&&(e.currentTarget.style.background="#00d4aa22")}
+          >
+            {loading ? "LOADING..." : mode === "signin" ? "SIGN IN →" : "CREATE ACCOUNT →"}
+          </button>
+
+          {/* Divider */}
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <div style={{flex:1,height:1,background:"#1a2535"}}/>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#2a4a6a"}}>OR</span>
+            <div style={{flex:1,height:1,background:"#1a2535"}}/>
+          </div>
+
+          {/* Google button */}
+          <button
+            onClick={onGoogleSignIn} disabled={loading}
+            style={{width:"100%",background:"#fff",color:"#1a1a1a",border:"none",borderRadius:8,padding:"11px 20px",fontSize:13,fontWeight:600,cursor:loading?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:10,transition:"all .15s",boxShadow:"0 2px 12px #00000044",opacity:loading?0.7:1}}
+            onMouseOver={e=>!loading&&(e.currentTarget.style.background="#f0f0f0")}
+            onMouseOut={e=>!loading&&(e.currentTarget.style.background="#fff")}
+          >
+            <GoogleIcon/> Continue with Google
+          </button>
+
+          {/* Error */}
+          {error && (
+            <div style={{marginTop:14,background:"#ff4d6d18",border:"1px solid #ff4d6d44",borderRadius:6,padding:"9px 12px",color:"#ff4d6d",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.5}}>
+              ⚠ {error}
+            </div>
+          )}
+
+          {/* Switch mode */}
+          <div style={{marginTop:20,textAlign:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#3a5a7a"}}>
+            {mode === "signin" ? (
+              <>Don't have an account?{" "}
+                <span onClick={()=>switchMode("signup")} style={{color:"#00d4aa",cursor:"pointer",textDecoration:"underline"}}>Sign up</span>
+              </>
+            ) : (
+              <>Already have an account?{" "}
+                <span onClick={()=>switchMode("signin")} style={{color:"#00d4aa",cursor:"pointer",textDecoration:"underline"}}>Sign in</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -359,7 +452,7 @@ export default function App() {
   }, [user, fetchLB]);
 
   // ── Sign in / out ──
-  const handleSignIn = async () => {
+  const handleGoogleSignIn = async () => {
     const fb = fbRef.current;
     if (!fb) return;
     setSignInLoading(true);
@@ -371,6 +464,46 @@ export default function App() {
       setFbError(e.code === "auth/popup-blocked"
         ? "Popup was blocked. Please allow popups for this site and try again."
         : e.message || "Sign-in failed. Please try again.");
+    }
+    setSignInLoading(false);
+  };
+
+  const handleEmailSignIn = async (email, password) => {
+    const fb = fbRef.current;
+    if (!fb) return;
+    setSignInLoading(true);
+    setFbError(null);
+    try {
+      await fb.signInWithEmailAndPassword(fb.auth, email, password);
+    } catch(e) {
+      const msgs = {
+        "auth/user-not-found":   "No account found with that email.",
+        "auth/wrong-password":   "Incorrect password.",
+        "auth/invalid-email":    "Invalid email address.",
+        "auth/invalid-credential": "Incorrect email or password.",
+      };
+      setFbError(msgs[e.code] || e.message || "Sign-in failed.");
+    }
+    setSignInLoading(false);
+  };
+
+  const handleEmailSignUp = async (email, password, username) => {
+    const fb = fbRef.current;
+    if (!fb) return;
+    if (!username.trim()) return setFbError("Please enter a display name.");
+    if (password.length < 6) return setFbError("Password must be at least 6 characters.");
+    setSignInLoading(true);
+    setFbError(null);
+    try {
+      const cred = await fb.createUserWithEmailAndPassword(fb.auth, email, password);
+      await fb.updateProfile(cred.user, { displayName: username.trim() });
+    } catch(e) {
+      const msgs = {
+        "auth/email-already-in-use": "An account with this email already exists.",
+        "auth/invalid-email":        "Invalid email address.",
+        "auth/weak-password":        "Password is too weak.",
+      };
+      setFbError(msgs[e.code] || e.message || "Sign-up failed.");
     }
     setSignInLoading(false);
   };
@@ -428,7 +561,7 @@ export default function App() {
 
   // ─── Render gates ───────────────────────────────────────────────────────────
   if (fbLoading) return <Spinner msg="LOADING TRADEFORGE..." />;
-  if (!user)     return <SignInScreen onSignIn={handleSignIn} error={fbError} loading={signInLoading}/>;
+  if (!user)     return <SignInScreen onEmailSignIn={handleEmailSignIn} onEmailSignUp={handleEmailSignUp} onGoogleSignIn={handleGoogleSignIn} error={fbError} loading={signInLoading}/>;
 
   const sel          = prices[selected] || {candles:[], current:0, open:0};
   const dayChange    = sel.current - sel.open;
