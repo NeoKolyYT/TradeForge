@@ -704,6 +704,38 @@ function SettingsTab({ user, fbRef, privateProfile, setPrivateProfile, settingsM
   );
 }
 
+// ─── Shared Sidebar Content ────────────────────────────────────────────────────
+function SidebarContent({search,prices,selected,flash,setSelected,setTab,setSearch}) {
+  const q = search.trim().toUpperCase();
+  const qLower = search.trim().toLowerCase();
+  if (!search.trim()) {
+    return Object.entries(SECTORS).map(([lbl,tks])=>(
+      <div key={lbl}>
+        <div className="sector-lbl">— {lbl} —</div>
+        {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");if(setSearch)setSearch("");}}/>)}
+      </div>
+    ));
+  }
+  const matchedSectors = Object.entries(SECTORS).filter(([lbl])=>
+    lbl.toLowerCase().includes(qLower)||lbl.replace(/[^a-zA-Z ]/g,"").toLowerCase().includes(qLower)
+  );
+  if (matchedSectors.length>0) {
+    return matchedSectors.map(([lbl,tks])=>(
+      <div key={lbl}>
+        <div className="sector-lbl">— {lbl} —</div>
+        {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");if(setSearch)setSearch("");}}/>)}
+      </div>
+    ));
+  }
+  const byTicker = ALL_TICKERS.filter(t=>t.includes(q));
+  const byName   = ALL_TICKERS.filter(t=>!t.includes(q)&&(COMPANY_NAMES[t]||"").toUpperCase().includes(q));
+  const results  = [...byTicker,...byName];
+  if (results.length===0) return (
+    <div style={{padding:"20px 14px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#3a5a7a",textAlign:"center"}}>No results</div>
+  );
+  return results.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");if(setSearch)setSearch("");}}/>);
+}
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [fbState,  setFbState]      = useState(null);   // full firebase module object
@@ -720,6 +752,7 @@ export default function App() {
   const [qty,      setQty]          = useState("");
   const [tab,      setTab]          = useState("trade");
   const [search,   setSearch]       = useState("");
+  const [showStockPicker, setShowStockPicker] = useState(false);
   const [flash,    setFlash]        = useState({});
   const [notif,    setNotif]        = useState(null);
   const [leaderboard,setLeaderboard]= useState([]);
@@ -1107,119 +1140,138 @@ export default function App() {
         </div>
       )}
 
-      {/* ── TABS ── */}
-      <div style={{background:"#0a0f14",borderBottom:"1px solid #1a2535",paddingLeft:12,flexShrink:0}}>
-        {["trade","portfolio","leaderboard","settings"].map(t=>(
-          <button key={t} className={`tab-btn ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{t.toUpperCase()}</button>
-        ))}
-      </div>
-
-      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-
-        {/* ── SIDEBAR ── */}
-        <div style={{width:200,borderRight:"1px solid #1a2535",overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
-          {/* Search box */}
-          <div style={{padding:"8px 10px",borderBottom:"1px solid #1a2535",position:"sticky",top:0,background:"#080c10",zIndex:2}}>
-            <input placeholder="Ticker or category..." value={search} onChange={e=>setSearch(e.target.value)}
-              style={{width:"100%",background:"#0d1520",border:"1px solid #1a2535",color:"#c8d6e5",borderRadius:4,padding:"5px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",boxSizing:"border-box"}}/>
+      {/* ── TABS (desktop only) ── */}
+      {!isMobile && (
+        <div style={{background:"#0a0f14",borderBottom:"1px solid #1a2535",paddingLeft:12,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",paddingRight:16}}>
+          <div>
+            {["trade","portfolio","leaderboard","settings"].map(t=>(
+              <button key={t} className={`tab-btn ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{t.toUpperCase()}</button>
+            ))}
           </div>
-          {/* Results */}
-          {(() => {
-            if (!search) {
-              // Show all sectors normally
-              return Object.entries(SECTORS).map(([lbl,tks])=>(
-                <div key={lbl}>
-                  <div className="sector-lbl">— {lbl} —</div>
-                  {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>)}
-                </div>
-              ));
-            }
-            const q = search.toUpperCase();
-            const qLower = search.toLowerCase();
-            // Check if query matches a category name
-            const matchedSectors = Object.entries(SECTORS).filter(([lbl]) =>
-              lbl.toLowerCase().includes(qLower) || lbl.replace(/[^a-zA-Z ]/g,"").toLowerCase().includes(qLower)
-            );
-            if (matchedSectors.length > 0) {
-              return matchedSectors.map(([lbl,tks])=>(
-                <div key={lbl}>
-                  <div className="sector-lbl">— {lbl} —</div>
-                  {tks.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>)}
-                </div>
-              ));
-            }
-            // Otherwise search by ticker or company name
-            const byTicker = ALL_TICKERS.filter(t => t.includes(q));
-            const byName   = ALL_TICKERS.filter(t => !t.includes(q) && (COMPANY_NAMES[t]||"").toUpperCase().includes(q));
-            const results  = [...byTicker, ...byName];
-            if (results.length === 0) return (
-              <div style={{padding:"20px 14px",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#3a5a7a",textAlign:"center"}}>No results for "{search}"</div>
-            );
-            return results.map(t=><TickerRow key={t} t={t} prices={prices} selected={selected} flash={flash} onSelect={()=>{setSelected(t);setTab("trade");}}/>);
-          })()}
+          <Countdown nextTick={nextTick}/>
         </div>
+      )}
 
-        {/* ── MAIN ── */}
-        <div style={{flex:1,overflowY:"auto",padding:"28px 40px",minWidth:0}}>
+      <div style={{flex:1,display:"flex",overflow:"hidden",position:"relative"}}>
+
+        {/* ── SIDEBAR (desktop) ── */}
+        {!isMobile && (
+          <div style={{width:200,borderRight:"1px solid #1a2535",overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"8px 10px",borderBottom:"1px solid #1a2535",position:"sticky",top:0,background:"#080c10",zIndex:2}}>
+              <input placeholder="Ticker or category..." value={search} onChange={e=>setSearch(e.target.value)}
+                style={{width:"100%",background:"#0d1520",border:"1px solid #1a2535",color:"#c8d6e5",borderRadius:4,padding:"5px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            {SidebarContent({search,prices,selected,flash,setSelected,setTab,setSearch})}
+          </div>
+        )}
+
+        {/* ── MOBILE STOCK PICKER SHEET ── */}
+        {isMobile && tab==="trade" && (
+          <div style={{
+            position:"fixed",bottom:56,left:0,right:0,
+            background:"#0a0f14",borderTop:"1px solid #1a2535",
+            zIndex:50,transition:"transform .3s",
+            transform: search ? "translateY(0)" : "translateY(100%)",
+            height:"60vh",display:"flex",flexDirection:"column",
+          }}>
+            <div style={{padding:"10px 14px",borderBottom:"1px solid #1a2535",display:"flex",gap:8,alignItems:"center"}}>
+              <input autoFocus placeholder="Search ticker or category..." value={search} onChange={e=>setSearch(e.target.value)}
+                style={{flex:1,background:"#0d1520",border:"1px solid #1a2535",color:"#c8d6e5",borderRadius:6,padding:"10px 12px",fontSize:14,fontFamily:"'IBM Plex Mono',monospace",outline:"none"}}/>
+              <button onClick={()=>setSearch("")} style={{background:"none",border:"none",color:"#4a6a8a",fontSize:20,cursor:"pointer",padding:"0 4px"}}>✕</button>
+            </div>
+            <div style={{overflowY:"auto",flex:1}}>
+              {SidebarContent({search,prices,selected,flash,setSelected,setTab:t=>{setTab(t);setSearch("");},setSearch})}
+            </div>
+          </div>
+        )}
+
+        {/* ── MAIN CONTENT ── */}
+        <div style={{flex:1,overflowY:"auto",padding:isMobile?"16px 14px 72px":"28px 40px",minWidth:0}}>
 
           {/* ════ TRADE ════ */}
           {tab==="trade" && (
-            <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-              {/* Header */}
-              <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:20,flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5",letterSpacing:2}}>
-                    {selected}<span style={{fontSize:14,color:"#4a6a8a",fontWeight:400,marginLeft:10}}>({COMPANY_NAMES[selected]||""})</span>
+            <div style={{display:"flex",flexDirection:"column"}}>
+
+              {/* Mobile: search button + selected stock bar */}
+              {isMobile && (
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"10px 14px"}}>
+                  <button onClick={()=>setSearch(" ")} style={{background:"#0d1520",border:"1px solid #1a2535",color:"#4a6a8a",borderRadius:6,padding:"8px 12px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",cursor:"pointer",flexShrink:0}}>
+                    🔍 Browse
+                  </button>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:700,color:"#e0eaf5",letterSpacing:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {selected} <span style={{fontSize:11,color:"#4a6a8a",fontWeight:400}}>({COMPANY_NAMES[selected]||""})</span>
+                    </div>
                   </div>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · <span style={{color:"#00d4aa88"}}>⟳ Prices sync every 30 seconds</span></div>
+                  {portfolio[selected]>0 && <Tag color="#7b9dbe">×{portfolio[selected]}</Tag>}
                 </div>
-                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:34,fontWeight:700,color:"#e0eaf5",marginBottom:2}}>{fmtUSD(sel.current)}</span>
-                <Tag color={clr(dayChange)}>{dayChange>=0?"▲":"▼"} {fmtUSD(Math.abs(dayChange))} ({fmtPct(dayChangePct)})</Tag>
-                {portfolio[selected]>0 && <Tag color="#7b9dbe">HELD: {portfolio[selected]}</Tag>}
-              </div>
+              )}
+
+              {/* Desktop header */}
+              {!isMobile && (
+                <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:20,flexWrap:"wrap"}}>
+                  <div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5",letterSpacing:2}}>
+                      {selected}<span style={{fontSize:14,color:"#4a6a8a",fontWeight:400,marginLeft:10}}>({COMPANY_NAMES[selected]||""})</span>
+                    </div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a",marginTop:2}}>TradeForge · <span style={{color:"#00d4aa88"}}>⟳ Prices sync every 30 seconds</span></div>
+                  </div>
+                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:34,fontWeight:700,color:"#e0eaf5",marginBottom:2}}>{fmtUSD(sel.current)}</span>
+                  <Tag color={clr(dayChange)}>{dayChange>=0?"▲":"▼"} {fmtUSD(Math.abs(dayChange))} ({fmtPct(dayChangePct)})</Tag>
+                  {portfolio[selected]>0 && <Tag color="#7b9dbe">HELD: {portfolio[selected]}</Tag>}
+                </div>
+              )}
+
+              {/* Mobile price strip */}
+              {isMobile && (
+                <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:12}}>
+                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:28,fontWeight:700,color:"#e0eaf5"}}>{fmtUSD(sel.current)}</span>
+                  <Tag color={clr(dayChange)}>{dayChange>=0?"▲":"▼"} {fmtPct(dayChangePct)}</Tag>
+                </div>
+              )}
 
               {/* Chart */}
-              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"4px 0",marginBottom:20,overflow:"hidden"}}>
-                <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(400,chartW)} height={220}/>
+              <div ref={chartRef} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"4px 0",marginBottom:16,overflow:"hidden"}}>
+                <StockChart candles={sel.candles} isUp={dayChange>=0} width={Math.max(300,chartW)} height={isMobile?160:220}/>
               </div>
 
               {/* Order panel */}
-              <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:24,maxWidth:480}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:14}}>PLACE ORDER</div>
-                <div style={{display:"flex",gap:12,marginBottom:14}}>
+              <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:isMobile?16:24,marginBottom:16}}>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:12}}>PLACE ORDER</div>
+                <div style={{display:"flex",gap:10,marginBottom:12}}>
                   <div style={{flex:1}}>
                     <div style={{fontSize:10,color:"#4a6a8a",marginBottom:6,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:1}}>SHARES</div>
-                    <input type="number" placeholder="0" value={qty} onChange={e=>setQty(e.target.value)}
-                      style={{width:"100%",background:"#0d1520",border:"1px solid #1e2d40",color:"#e0eaf5",borderRadius:4,padding:"12px 16px",fontSize:22,fontFamily:"'IBM Plex Mono',monospace",outline:"none",boxSizing:"border-box"}}/>
+                    <input type="number" inputMode="numeric" placeholder="0" value={qty} onChange={e=>setQty(e.target.value)}
+                      style={{width:"100%",background:"#0d1520",border:"1px solid #1e2d40",color:"#e0eaf5",borderRadius:6,padding:isMobile?"14px 12px":"12px 16px",fontSize:isMobile?20:22,fontFamily:"'IBM Plex Mono',monospace",outline:"none",boxSizing:"border-box"}}/>
                   </div>
                   <div style={{flex:1}}>
                     <div style={{fontSize:10,color:"#4a6a8a",marginBottom:6,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:1}}>COST EST.</div>
-                    <div style={{background:"#0d1520",border:"1px solid #1e2d40",borderRadius:4,padding:"12px 16px",fontSize:22,fontFamily:"'IBM Plex Mono',monospace",color:"#7b9dbe"}}>
+                    <div style={{background:"#0d1520",border:"1px solid #1e2d40",borderRadius:6,padding:isMobile?"14px 12px":"12px 16px",fontSize:isMobile?18:22,fontFamily:"'IBM Plex Mono',monospace",color:"#7b9dbe"}}>
                       {qty&&parseInt(qty)>0 ? fmtUSD(sel.current*parseInt(qty)) : "—"}
                     </div>
                   </div>
                 </div>
                 <div style={{display:"flex",gap:10}}>
-                  <button className="abtn buy-btn" onClick={()=>trade("BUY")}>BUY</button>
-                  <button className="abtn sell-btn" onClick={()=>trade("SELL")}>SELL</button>
+                  <button className="abtn buy-btn" style={{flex:1,padding:isMobile?"16px":"12px 32px"}} onClick={()=>trade("BUY")}>BUY</button>
+                  <button className="abtn sell-btn" style={{flex:1,padding:isMobile?"16px":"12px 32px"}} onClick={()=>trade("SELL")}>SELL</button>
                 </div>
-                <div style={{marginTop:12,fontSize:11,color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace"}}>
+                <div style={{marginTop:10,fontSize:11,color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace"}}>
                   Cash: {fmtUSD(cash)} · Max: {Math.floor(cash/(sel.current||1))} shares
                 </div>
               </div>
 
               {/* Order history */}
               {trades.length>0 && (
-                <div style={{marginTop:24}}>
+                <div>
                   <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:10}}>ORDER HISTORY</div>
                   <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
                     {trades.slice(0,10).map(tr=>(
-                      <div key={tr.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 14px",borderBottom:"1px solid #0d1520",gap:8,flexWrap:"wrap"}}>
+                      <div key={tr.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #0d1520",gap:6}}>
                         <Tag color={tr.type==="BUY"?"#00d4aa":"#ff4d6d"}>{tr.type}</Tag>
-                        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#e0eaf5",minWidth:44}}>{tr.ticker}</span>
+                        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#e0eaf5",fontWeight:700}}>{tr.ticker}</span>
                         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#8ab0cc"}}>{tr.qty}×{fmtUSD(tr.price)}</span>
                         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:tr.type==="BUY"?"#ff4d6d":"#00d4aa"}}>{tr.type==="BUY"?"−":"+"}{fmtUSD(tr.total)}</span>
-                        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a"}}>{tr.time}</span>
+                        {!isMobile && <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#3a5a7a"}}>{tr.time}</span>}
                       </div>
                     ))}
                   </div>
@@ -1234,52 +1286,132 @@ export default function App() {
               <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:18}}>HOLDINGS — {user.displayName}</div>
               {Object.keys(portfolio).length===0
                 ? <div style={{color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,padding:"36px 0"}}>No positions yet — start trading!</div>
-                : <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden",marginBottom:24}}>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",padding:"10px 14px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:1}}>
-                      {["TICKER","SHARES","PRICE","VALUE","P&L"].map(h=><div key={h}>{h}</div>)}
-                    </div>
-                    {Object.entries(portfolio).map(([t,shares])=>{
-                      const p=prices[t]?.current||0, val=p*shares;
-                      const buys=trades.filter(tr=>tr.ticker===t&&tr.type==="BUY");
-                      const avgCost=buys.length ? buys.reduce((s,tr)=>s+tr.total,0)/buys.reduce((s,tr)=>s+tr.qty,0) : p;
-                      const pnl=(p-avgCost)*shares;
-                      return (
-                        <div key={t} className="tr" onClick={()=>{setSelected(t);setTab("trade");}}
-                          style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",padding:"11px 14px",borderBottom:"1px solid #0d1520",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,cursor:"pointer"}}>
-                          <div style={{color:"#e0eaf5",fontWeight:700}}>{t}</div>
-                          <div style={{color:"#8ab0cc"}}>{shares}</div>
-                          <div style={{color:"#8ab0cc"}}>{fmtUSD(p)}</div>
-                          <div style={{color:"#e0eaf5"}}>{fmtUSD(val)}</div>
-                          <div style={{color:clr(pnl)}}>{pnl>=0?"+":""}{fmtUSD(pnl)}</div>
-                        </div>
-                      );
-                    })}
+                : <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+                    {isMobile
+                      ? Object.entries(portfolio).map(([t,shares])=>{
+                          const p=prices[t]?.current||0, val=p*shares;
+                          const buys=trades.filter(tr=>tr.ticker===t&&tr.type==="BUY");
+                          const avgCost=buys.length?buys.reduce((s,tr)=>s+tr.total,0)/buys.reduce((s,tr)=>s+tr.qty,0):p;
+                          const pnl=(p-avgCost)*shares;
+                          return (
+                            <div key={t} onClick={()=>{setSelected(t);setTab("trade");}}
+                              style={{padding:"14px",borderBottom:"1px solid #0d1520",cursor:"pointer"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:700,color:"#e0eaf5"}}>{t}</span>
+                                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,color:"#e0eaf5"}}>{fmtUSD(val)}</span>
+                              </div>
+                              <div style={{display:"flex",justifyContent:"space-between"}}>
+                                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#4a6a8a"}}>{shares} shares @ {fmtUSD(p)}</span>
+                                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:clr(pnl)}}>{pnl>=0?"+":""}{fmtUSD(pnl)}</span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      : <>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",padding:"10px 14px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:1}}>
+                            {["TICKER","SHARES","PRICE","VALUE","P&L"].map(h=><div key={h}>{h}</div>)}
+                          </div>
+                          {Object.entries(portfolio).map(([t,shares])=>{
+                            const p=prices[t]?.current||0, val=p*shares;
+                            const buys=trades.filter(tr=>tr.ticker===t&&tr.type==="BUY");
+                            const avgCost=buys.length?buys.reduce((s,tr)=>s+tr.total,0)/buys.reduce((s,tr)=>s+tr.qty,0):p;
+                            const pnl=(p-avgCost)*shares;
+                            return (
+                              <div key={t} className="tr" onClick={()=>{setSelected(t);setTab("trade");}}
+                                style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",padding:"11px 14px",borderBottom:"1px solid #0d1520",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,cursor:"pointer"}}>
+                                <div style={{color:"#e0eaf5",fontWeight:700}}>{t}</div>
+                                <div style={{color:"#8ab0cc"}}>{shares}</div>
+                                <div style={{color:"#8ab0cc"}}>{fmtUSD(p)}</div>
+                                <div style={{color:"#e0eaf5"}}>{fmtUSD(val)}</div>
+                                <div style={{color:clr(pnl)}}>{pnl>=0?"+":""}{fmtUSD(pnl)}</div>
+                              </div>
+                            );
+                          })}
+                        </>
+                    }
                   </div>
               }
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
                 {[
-                  {label:"CASH",     val:fmtUSD(cash),                                 raw:1},
-                  {label:"INVESTED", val:fmtUSD(totalValue-cash),                      raw:1},
-                  {label:"TOTAL P&L",val:(totalPnL>=0?"+":"")+fmtUSD(totalPnL), raw:totalPnL},
+                  {label:"CASH",val:fmtUSD(cash),raw:1},
+                  {label:"INVESTED",val:fmtUSD(totalValue-cash),raw:1},
+                  {label:"TOTAL P&L",val:(totalPnL>=0?"+":"")+fmtUSD(totalPnL),raw:totalPnL},
                 ].map(({label,val,raw})=>(
-                  <div key={label} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"14px 16px"}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2,marginBottom:8}}>{label}</div>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:19,fontWeight:700,color:label==="TOTAL P&L"?clr(raw):"#e0eaf5"}}>{val}</div>
+                  <div key={label} style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#4a6a8a",letterSpacing:1,marginBottom:6}}>{label}</div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:isMobile?14:19,fontWeight:700,color:label==="TOTAL P&L"?clr(raw):"#e0eaf5"}}>{val}</div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* ════ LEADERBOARD ════ */}
+          {tab==="leaderboard" && (
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:1}}>GLOBAL LEADERBOARD · LIVE</div>
+                <button className="ctog" onClick={fetchLB} style={{fontSize:10}}>↻ REFRESH</button>
+              </div>
+              {leaderboard.length===0
+                ? <div style={{color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace",fontSize:13}}>No players yet!</div>
+                : <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
+                    {isMobile
+                      ? leaderboard.filter(r=>!r.private||r.id===user.uid).map((r,i)=>(
+                          <div key={r.id} style={{padding:"14px",borderBottom:"1px solid #0d1520",background:r.id===user.uid?"#00d4aa08":"transparent",borderLeft:r.id===user.uid?"2px solid #00d4aa":"2px solid transparent"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,minWidth:28,color:i===0?"#ffd700":i===1?"#c0c0c0":i===2?"#cd7f32":"#3a5a7a"}}>
+                                {i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}
+                              </span>
+                              {r.photoURL
+                                ? <img src={r.photoURL} alt="" style={{width:24,height:24,borderRadius:"50%",border:"1px solid #1a2535"}}/>
+                                : <div style={{width:24,height:24,borderRadius:"50%",background:"#1a2535",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#4a6a8a",fontFamily:"'IBM Plex Mono',monospace"}}>{r.name?.[0]?.toUpperCase()}</div>
+                              }
+                              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:r.id===user.uid?"#00d4aa":"#e0eaf5",fontWeight:700,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
+                              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:clr(r.pnl),fontWeight:700}}>{fmtPct(r.pnl)}</span>
+                            </div>
+                            <div style={{display:"flex",justifyContent:"space-between",paddingLeft:38}}>
+                              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#4a6a8a"}}>Portfolio: <span style={{color:"#8ab0cc"}}>{fmtUSD(r.value)}</span></span>
+                              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#4a6a8a"}}>Cash: <span style={{color:"#8ab0cc"}}>{fmtUSD(r.cash||0)}</span></span>
+                            </div>
+                          </div>
+                        ))
+                      : <>
+                          <div style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"12px 20px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#4a6a8a",letterSpacing:1}}>
+                            {["#","","TRADER","PORTFOLIO","CASH","RETURN"].map(h=><div key={h}>{h}</div>)}
+                          </div>
+                          {leaderboard.filter(r=>!r.private||r.id===user.uid).map((r,i)=>(
+                            <div key={r.id} style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"14px 20px",borderBottom:"1px solid #0d1520",background:r.id===user.uid?"#00d4aa08":"transparent",borderLeft:r.id===user.uid?"2px solid #00d4aa":"2px solid transparent",alignItems:"center"}}>
+                              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:i===0?"#ffd700":i===1?"#c0c0c0":i===2?"#cd7f32":"#3a5a7a"}}>
+                                {i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}
+                              </div>
+                              <div>
+                                {r.photoURL
+                                  ? <img src={r.photoURL} alt="" style={{width:24,height:24,borderRadius:"50%",border:"1px solid #1a2535",display:"block"}}/>
+                                  : <div style={{width:24,height:24,borderRadius:"50%",background:"#1a2535",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#4a6a8a",fontFamily:"'IBM Plex Mono',monospace"}}>{r.name?.[0]?.toUpperCase()}</div>
+                                }
+                              </div>
+                              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:r.id===user.uid?"#00d4aa":"#e0eaf5",fontWeight:r.id===user.uid?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                {r.name}{r.private&&r.id===user.uid&&<span style={{color:"#3a5a7a",fontSize:10,marginLeft:6}}>(private)</span>}
+                              </div>
+                              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#8ab0cc"}}>{fmtUSD(r.value)}</div>
+                              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#c8d6e5"}}>{fmtUSD(r.cash||0)}</div>
+                              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:clr(r.pnl)}}>{fmtPct(r.pnl)}</div>
+                            </div>
+                          ))}
+                        </>
+                    }
+                  </div>
+              }
+            </div>
+          )}
+
           {/* ════ SETTINGS ════ */}
           {tab==="settings" && (
             <SettingsTab
-              user={user}
-              fbRef={fbRef}
-              privateProfile={privateProfile}
-              setPrivateProfile={setPrivateProfile}
-              settingsMsg={settingsMsg}
-              setSettingsMsg={setSettingsMsg}
+              user={user} fbRef={fbRef}
+              privateProfile={privateProfile} setPrivateProfile={setPrivateProfile}
+              settingsMsg={settingsMsg} setSettingsMsg={setSettingsMsg}
               handleSignOut={handleSignOut}
               db_save={async(priv)=>{
                 const fb=fbRef.current; const u=userRef.current;
@@ -1289,49 +1421,30 @@ export default function App() {
               }}
             />
           )}
-
-          {/* ════ LEADERBOARD ════ */}
-          {tab==="leaderboard" && (
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#4a6a8a",letterSpacing:2}}>GLOBAL LEADERBOARD · $10K START · LIVE</div>
-                <button className="ctog" onClick={fetchLB} style={{fontSize:10}}>↻ REFRESH</button>
-              </div>
-              {leaderboard.length===0
-                ? <div style={{color:"#3a5a7a",fontFamily:"'IBM Plex Mono',monospace",fontSize:13}}>No players yet — be the first!</div>
-                : <div style={{background:"#0a0f14",border:"1px solid #1a2535",borderRadius:8,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"12px 20px",borderBottom:"1px solid #1a2535",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#4a6a8a",letterSpacing:1}}>
-                      {["#","","TRADER","PORTFOLIO","CASH","RETURN"].map(h=><div key={h}>{h}</div>)}
-                    </div>
-                    {leaderboard.filter(r=>!r.private||r.id===user.uid).map((r,i)=>(
-                      <div key={r.id} style={{display:"grid",gridTemplateColumns:"52px 44px 1fr 1fr 1fr 1fr",padding:"14px 20px",borderBottom:"1px solid #0d1520",background:r.id===user.uid?"#00d4aa08":"transparent",borderLeft:r.id===user.uid?"2px solid #00d4aa":"2px solid transparent",alignItems:"center"}}>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:i===0?"#ffd700":i===1?"#c0c0c0":i===2?"#cd7f32":"#3a5a7a"}}>
-                          {i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`}
-                        </div>
-                        <div>
-                          {r.photoURL
-                            ? <img src={r.photoURL} alt="" style={{width:24,height:24,borderRadius:"50%",border:"1px solid #1a2535",display:"block"}}/>
-                            : <div style={{width:24,height:24,borderRadius:"50%",background:"#1a2535",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#4a6a8a",fontFamily:"'IBM Plex Mono',monospace"}}>{r.name?.[0]?.toUpperCase()}</div>
-                          }
-                        </div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:r.id===user.uid?"#00d4aa":"#e0eaf5",fontWeight:r.id===user.uid?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {r.name}{r.private&&r.id===user.uid&&<span style={{color:"#3a5a7a",fontSize:10,marginLeft:6}}>(private)</span>}
-                        </div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#8ab0cc"}}>{fmtUSD(r.value)}</div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#c8d6e5"}}>{fmtUSD(r.cash||0)}</div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:clr(r.pnl)}}>{fmtPct(r.pnl)}</div>
-                      </div>
-                    ))}
-                  </div>
-              }
-              <div style={{marginTop:14,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#2a4a6a",lineHeight:2}}>
-                ✓ Signed in as {user.displayName} — progress auto-saved to Google<br/>
-                ✓ Prices update every 30s for all players<br/>
-                ✓ Leaderboard refreshes every {LEADERBOARD_SYNC_MS/1000}s automatically
-              </div>
-            </div>
-          )}
         </div>
+      </div>
+
+      {/* ── MOBILE BOTTOM NAV ── */}
+      {isMobile && (
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0a0f14",borderTop:"1px solid #1a2535",display:"flex",zIndex:100,height:56}}>
+          {[
+            {id:"trade",   icon:"📈", label:"Trade"},
+            {id:"portfolio",icon:"💼",label:"Portfolio"},
+            {id:"leaderboard",icon:"🏆",label:"Ranks"},
+            {id:"settings",icon:"⚙️", label:"Settings"},
+          ].map(({id,icon,label})=>(
+            <button key={id} onClick={()=>{setTab(id);setSearch("");}}
+              style={{flex:1,background:"none",border:"none",color:tab===id?"#00d4aa":"#3a5a7a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,cursor:"pointer",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:0.5,transition:"color .15s"}}>
+              <span style={{fontSize:18}}>{icon}</span>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* NK Productions watermark */}
+      <div style={{position:"fixed",bottom:isMobile?60:8,right:12,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#1e3a5a",letterSpacing:1,pointerEvents:"none",userSelect:"none",zIndex:999}}>
+        NK Productions
       </div>
     </div>
   );
